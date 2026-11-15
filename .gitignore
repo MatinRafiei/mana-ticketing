@@ -1,0 +1,22 @@
+# Operating System files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE and Editor configurations
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Log and debug files
+*.log
+npm-debug.log*
+yarn-debug.log*
+
+# Local export data and caches
+export*.json
+.cache/
+tmp/
+scratch/

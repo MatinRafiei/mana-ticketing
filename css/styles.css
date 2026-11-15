@@ -1,0 +1,169 @@
+/* Modern Typography and Custom Styles with IRAN Rounded & Responsive Mobile UX */
+
+@import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800;900&display=swap');
+
+@font-face {
+  font-family: 'IRAN Rounded';
+  src: local('IRAN Rounded'), local('Iran Rounded'), local('IRANRounded'), local('IRANYekan');
+  font-weight: normal;
+  font-style: normal;
+}
+
+:root {
+  --font-main: 'IRAN Rounded', 'Vazirmatn', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+html, body {
+  overflow-x: hidden !important;
+  max-width: 100vw !important;
+  width: 100%;
+  font-family: var(--font-main);
+  direction: rtl;
+  text-align: right;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+  touch-action: manipulation;
+}
+
+/* Hide scrollbar utility for clean horizontal swipe tabs on mobile */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Custom Scrollbar for desktop */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.4);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.6);
+}
+
+/* Custom Modal Backdrop Blur */
+.modal-backdrop {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* Status Badge Styles */
+.status-badge-open {
+  background-color: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+.dark .status-badge-open {
+  background-color: rgba(30, 58, 138, 0.4);
+  color: #93c5fd;
+  border-color: #1e40af;
+}
+
+.status-badge-in_progress {
+  background-color: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+.dark .status-badge-in_progress {
+  background-color: rgba(120, 53, 15, 0.4);
+  color: #fcd34d;
+  border-color: #92400e;
+}
+
+.status-badge-waiting {
+  background-color: #faf5ff;
+  color: #7e22ce;
+  border: 1px solid #e9d5ff;
+}
+.dark .status-badge-waiting {
+  background-color: rgba(88, 28, 135, 0.4);
+  color: #d8b4fe;
+  border-color: #6b21a8;
+}
+
+.status-badge-resolved {
+  background-color: #f0fdf4;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+.dark .status-badge-resolved {
+  background-color: rgba(20, 83, 45, 0.4);
+  color: #86efac;
+  border-color: #166534;
+}
+
+.status-badge-closed {
+  background-color: #f8fafc;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+}
+.dark .status-badge-closed {
+  background-color: rgba(30, 41, 59, 0.4);
+  color: #94a3b8;
+  border-color: #334155;
+}
+
+/* Priority Indicator Pills */
+.priority-urgent {
+  background-color: #fee2e2;
+  color: #b91c1c;
+}
+.dark .priority-urgent {
+  background-color: rgba(127, 29, 29, 0.5);
+  color: #fca5a5;
+}
+
+.priority-high {
+  background-color: #ffedd5;
+  color: #c2410c;
+}
+.dark .priority-high {
+  background-color: rgba(124, 45, 18, 0.5);
+  color: #fdba74;
+}
+
+.priority-normal {
+  background-color: #f1f5f9;
+  color: #334155;
+}
+.dark .priority-normal {
+  background-color: rgba(51, 65, 85, 0.5);
+  color: #cbd5e1;
+}
+
+.priority-low {
+  background-color: #f8fafc;
+  color: #64748b;
+}
+.dark .priority-low {
+  background-color: rgba(30, 41, 59, 0.5);
+  color: #94a3b8;
+}
+
+/* File Drag & Drop hover effect */
+.drag-over {
+  border-color: #3b82f6 !important;
+  background-color: rgba(239, 246, 255, 0.6) !important;
+}
+
+.dark .drag-over {
+  background-color: rgba(30, 58, 138, 0.2) !important;
+}
+
+/* Safe Area Inset support for iPhones with notch */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 16px);
+}

@@ -1,0 +1,20 @@
+{
+  "name": "سامانه تیکتینگ درون‌سازمانی",
+  "short_name": "تیکتینگ مانا",
+  "description": "سامانه تیکتینگ سریع، بدون نیاز به سرور همراه با اعلان‌های بلادرنگ و گوگل درایو",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#2563eb",
+  "orientation": "portrait-primary",
+  "dir": "rtl",
+  "lang": "fa",
+  "icons": [
+    {
+      "src": "./icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
