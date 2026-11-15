@@ -263,6 +263,9 @@ class StateManager {
       onRemoteUpdate: (data) => this.handleRemoteData(data, 'gdrive'),
       onStatusChange: (status) => {
         this.gdriveStatus = status;
+        if (status.status === 'connected' && this.gdriveProvider.googleUser) {
+          this.syncGoogleUserWithCurrent();
+        }
         this.emit('gdrive_status_change', status);
       }
     });
@@ -424,6 +427,41 @@ class StateManager {
     localStorage.setItem('current_user_id', user.id);
     this.rebuildNotifications();
     this.emit('user_changed', user);
+    this.emit('state_updated');
+  }
+
+  // Automatically match or register logged-in Google account with internal user directory
+  syncGoogleUserWithCurrent() {
+    const gUser = this.gdriveProvider.googleUser;
+    if (!gUser || !gUser.email) return;
+
+    const email = gUser.email.toLowerCase().trim();
+    let matchedUser = this.users.find(u => u.email?.toLowerCase().trim() === email);
+
+    if (!matchedUser) {
+      // Auto-register Google account in company team directory
+      const initials = (gUser.name || 'کاربر گوگل').split(' ').map(p => p[0]).join('‌');
+      matchedUser = {
+        id: 'u_g_' + (gUser.sub || Date.now()),
+        name: gUser.name || email.split('@')[0],
+        email: email,
+        roleId: this.users.length === 0 ? 'admin' : 'staff',
+        department: 'پرسنل گوگل',
+        avatar: gUser.picture || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120',
+        initials: initials || 'گ‌ک'
+      };
+      this.users.push(matchedUser);
+      this.persistLocal();
+    } else {
+      if (gUser.picture && matchedUser.avatar !== gUser.picture) {
+        matchedUser.avatar = gUser.picture;
+      }
+    }
+
+    this.currentUser = matchedUser;
+    localStorage.setItem('current_user_id', matchedUser.id);
+    this.rebuildNotifications();
+    this.emit('user_changed', matchedUser);
     this.emit('state_updated');
   }
 

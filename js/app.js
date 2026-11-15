@@ -60,12 +60,19 @@ class App {
       }, 300);
     }
 
-    // 8. Auto-connect Google Drive if credentials exist and mode is gdrive
+    // 8. Auto-restore Google Drive session and sync if configured
     if (state.storageMode === 'gdrive' && state.gdriveProvider.isConfigured()) {
       try {
-        await state.gdriveProvider.initGis();
+        const restored = await state.gdriveProvider.autoRestoreSession();
+        if (restored) {
+          const freshData = await state.gdriveProvider.load();
+          if (freshData) {
+            state.handleRemoteData(freshData, 'gdrive');
+          }
+          state.syncGoogleUserWithCurrent();
+        }
       } catch (err) {
-        console.warn('Auto GIS init notice:', err);
+        console.warn('Auto restore Google session notice:', err);
       }
     }
 

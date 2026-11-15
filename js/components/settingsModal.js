@@ -27,6 +27,7 @@ export class SettingsModalComponent {
     const gdrive = state.gdriveProvider;
     const isConnected = gdrive.isConnected();
     const currentMode = state.storageMode;
+    const gUser = gdrive.googleUser;
 
     this.container.innerHTML = `
       <div class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto modal-backdrop bg-slate-950/60 transition-opacity">
@@ -43,7 +44,7 @@ export class SettingsModalComponent {
               </div>
               <div class="truncate">
                 <h3 class="font-extrabold text-xs sm:text-base text-slate-900 dark:text-white truncate">تنظیمات اتصال و گوگل درایو</h3>
-                <p class="hidden sm:block text-[11px] text-slate-500 dark:text-slate-400">پیکربندی ذخیره‌سازی ابری بدون سرور و تست کاربران</p>
+                <p class="hidden sm:block text-[11px] text-slate-500 dark:text-slate-400">پیکربندی ذخیره‌سازی ابری بدون سرور و پایداری نشست</p>
               </div>
             </div>
             <button id="settings-close-btn" class="p-1.5 sm:p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition">
@@ -62,7 +63,7 @@ export class SettingsModalComponent {
                   <input type="radio" name="storage_mode" value="local" ${currentMode === 'local' ? 'checked' : ''} class="mt-0.5 text-blue-600 focus:ring-blue-500" />
                   <div>
                     <span class="text-xs font-bold text-slate-900 dark:text-white block">حالت لوکال / تستی</span>
-                    <span class="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">آماده به کار بدون نیاز به API، تست بین تب‌ها</span>
+                    <span class="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">بدون نیاز به API، تست بین تب‌ها</span>
                   </div>
                 </label>
 
@@ -79,6 +80,34 @@ export class SettingsModalComponent {
               </div>
             </div>
 
+            <!-- Connected Account Card (If logged in) -->
+            ${isConnected ? `
+              <div class="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-2xl p-3.5 sm:p-4 flex items-center justify-between flex-wrap gap-3">
+                <div class="flex items-center gap-3">
+                  <img src="${gUser?.picture || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120'}" class="w-10 h-10 rounded-full object-cover ring-2 ring-emerald-500/50" />
+                  <div>
+                    <div class="flex items-center gap-1.5">
+                      <span class="font-extrabold text-xs sm:text-sm text-emerald-900 dark:text-emerald-200">${gUser?.name || 'حساب گوگل متصل'}</span>
+                      <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                    </div>
+                    <span class="text-[11px] text-emerald-700 dark:text-emerald-300 font-mono block">${gUser?.email || ''}</span>
+                    <span class="text-[10px] text-emerald-600 dark:text-emerald-400">نشست ورود در مرورگر ذخیره شده است</span>
+                  </div>
+                </div>
+
+                <div class="flex items-center gap-2 mr-auto sm:mr-0">
+                  <button type="button" id="btn-sync-now" class="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition flex items-center gap-1">
+                    ${renderIcon('refresh', 'w-3.5 h-3.5')}
+                    <span>همگام‌سازی فوری</span>
+                  </button>
+
+                  <button type="button" id="btn-logout-google" class="px-3 py-1.5 rounded-xl border border-rose-300 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-xs font-bold transition">
+                    خروج از حساب
+                  </button>
+                </div>
+              </div>
+            ` : ''}
+
             <!-- Google Drive API Credentials Form -->
             <div class="space-y-3 sm:space-y-4">
               <div class="flex items-center justify-between">
@@ -87,9 +116,9 @@ export class SettingsModalComponent {
                   مشخصات دسترسی Google OAuth
                 </h4>
                 <div class="flex items-center gap-1.5 text-[11px]">
-                  <span class="w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-500 animate-ping' : 'bg-slate-300 dark:bg-slate-600'}"></span>
+                  <span class="w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}"></span>
                   <span class="${isConnected ? 'text-emerald-600 font-bold' : 'text-slate-500'}">
-                    ${isConnected ? 'متصل به حساب گوگل' : 'قطع ارتباط'}
+                    ${isConnected ? 'متصل و فعال' : 'قطع ارتباط'}
                   </span>
                 </div>
               </div>
@@ -129,7 +158,7 @@ export class SettingsModalComponent {
 
                 <button type="button" id="btn-login-google" class="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-blue-500/20 transition">
                   ${renderIcon('drive', 'w-4 h-4')}
-                  <span>${isConnected ? 'احراز هویت مجدد' : 'ورود با حساب گوگل'}</span>
+                  <span>${isConnected ? 'احراز هویت مجدد' : 'ورود با حساب گوگل و اتصال درایو'}</span>
                 </button>
               </div>
             </div>
@@ -144,7 +173,7 @@ export class SettingsModalComponent {
                 <li>وارد <a href="https://console.cloud.google.com" target="_blank" class="text-blue-600 dark:text-blue-400 underline font-bold">Google Cloud Console</a> شوید.</li>
                 <li>در <strong>APIs & Services &gt; Library</strong>، سرویس <strong>Google Drive API</strong> را <strong>Enable</strong> نمایید.</li>
                 <li>در <strong>OAuth consent screen &gt; Test Users</strong>، ایمیل‌های همکاران شرکت را ثبت کنید.</li>
-                <li>در <strong>Credentials &gt; OAuth client ID</strong>، نوع <strong>Web application</strong> را برگزیده و آدرس برنامه را در <strong>Authorized JavaScript origins</strong> بنویسید.</li>
+                <li>در <strong>Credentials &gt; OAuth client ID</strong>، نوع <strong>Web application</strong> را برگزیده و در <strong>Authorized JavaScript origins</strong> آدرس سایت بدون مسیر را بنویسید (مثال: <code class="bg-slate-200 dark:bg-slate-700 px-1 rounded">https://matinrafiei.github.io</code>).</li>
                 <li>کد <strong>Client ID</strong> را کپی کرده و در کادر بالا ذخیره کنید.</li>
               </ol>
             </div>
@@ -196,6 +225,43 @@ export class SettingsModalComponent {
       });
     });
 
+    // Google Sign Out
+    document.getElementById('btn-logout-google')?.addEventListener('click', () => {
+      if (confirm('آیا مایل به خروج از حساب گوگل هستید؟')) {
+        state.gdriveProvider.signOut();
+        notificationEngine.triggerToast({
+          title: 'خروج از حساب گوگل',
+          message: 'نشست ورود با موفقیت پاک شد.',
+          type: 'info'
+        });
+        this.render();
+      }
+    });
+
+    // Sync Now
+    document.getElementById('btn-sync-now')?.addEventListener('click', async () => {
+      const btn = document.getElementById('btn-sync-now');
+      btn.disabled = true;
+      btn.innerHTML = 'در حال همگام‌سازی...';
+      try {
+        await state.persistCurrentData();
+        const fresh = await state.gdriveProvider.load();
+        if (fresh) {
+          state.handleRemoteData(fresh, 'gdrive');
+        }
+        notificationEngine.triggerToast({
+          title: 'همگام‌سازی موفق',
+          message: 'اطلاعات با گوگل درایو همگام شد.',
+          type: 'success'
+        });
+      } catch (e) {
+        alert('خطا در همگام‌سازی: ' + e.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = 'همگام‌سازی فوری';
+      }
+    });
+
     document.getElementById('btn-login-google')?.addEventListener('click', async () => {
       const clientId = document.getElementById('gdrive-client-id').value.trim();
       if (!clientId) {
@@ -215,7 +281,7 @@ export class SettingsModalComponent {
 
         notificationEngine.triggerToast({
           title: 'اتصال به گوگل درایو برقرار شد',
-          message: 'همگام‌سازی و پایش هر ' + (state.gdriveProvider.pollIntervalMs / 1000) + ' ثانیه فعال گردید.',
+          message: 'نشست ورود شما ذخیره شد و با رفرش صفحه از بین نخواهد رفت.',
           type: 'success'
         });
 

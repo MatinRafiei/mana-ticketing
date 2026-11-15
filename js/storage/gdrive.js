@@ -1,24 +1,29 @@
-// Google Drive API v3 Client with Polling Sync & Direct Attachment Upload
+// Google Drive API v3 Client with Persistent Session, Silent Refresh & Auto-Sync
 
 export class GoogleDriveProvider {
   constructor({ onRemoteUpdate, onStatusChange }) {
     this.onRemoteUpdate = onRemoteUpdate;
     this.onStatusChange = onStatusChange;
     this.tokenClient = null;
-    this.accessToken = null;
-    this.tokenExpiresAt = 0;
-    this.fileId = null;
-    this.folderId = null;
-    this.lastModifiedTime = null;
-    this.pollingTimer = null;
-    this.pollIntervalMs = 12000; // 12 seconds default (within the 10-15s requirement)
-    this.isPolling = false;
-
-    // Load saved settings
-    this.clientId = localStorage.getItem('gdrive_client_id') || '';
-    this.apiKey = localStorage.getItem('gdrive_api_key') || '';
+    this.accessToken = localStorage.getItem('gdrive_access_token') || null;
+    this.tokenExpiresAt = Number(localStorage.getItem('gdrive_token_expires_at')) || 0;
     this.fileId = localStorage.getItem('gdrive_file_id') || null;
     this.folderId = localStorage.getItem('gdrive_folder_id') || null;
+    this.lastModifiedTime = null;
+    this.pollingTimer = null;
+    this.pollIntervalMs = (Number(localStorage.getItem('gdrive_poll_interval')) || 12) * 1000;
+    this.isPolling = false;
+
+    // Load saved client settings
+    this.clientId = localStorage.getItem('gdrive_client_id') || '';
+    this.apiKey = localStorage.getItem('gdrive_api_key') || '';
+
+    // Load saved Google User Profile
+    this.googleUser = null;
+    try {
+      const savedUser = localStorage.getItem('gdrive_google_user');
+      if (savedUser) this.googleUser = JSON.parse(savedUser);
+    } catch (e) {}
   }
 
   isConfigured() {
@@ -39,7 +44,7 @@ export class GoogleDriveProvider {
     localStorage.setItem('gdrive_poll_interval', String(pollIntervalSec));
   }
 
-  // Initialize Google Identity Services
+  // Initialize Google Identity Services Client
   async initGis() {
     if (!window.google?.accounts?.oauth2) {
       await this.loadScript('https://accounts.google.com/gsi/client');
@@ -54,17 +59,24 @@ export class GoogleDriveProvider {
         this.tokenClient = window.google.accounts.oauth2.initTokenClient({
           client_id: this.clientId,
           scope: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
-          callback: (tokenResponse) => {
+          callback: async (tokenResponse) => {
             if (tokenResponse.error) {
-              this.notifyStatus('error', 'خطا در احراز هویت گوگل: ' + tokenResponse.error);
-              reject(new Error(tokenResponse.error));
+              console.warn('Google Auth callback error:', tokenResponse.error);
+              this.notifyStatus('error', 'خطا در احراز هویت: ' + tokenResponse.error);
               return;
             }
+
+            // Persist token in localStorage
             this.accessToken = tokenResponse.access_token;
             this.tokenExpiresAt = Date.now() + (Number(tokenResponse.expires_in) * 1000);
+            localStorage.setItem('gdrive_access_token', this.accessToken);
+            localStorage.setItem('gdrive_token_expires_at', String(this.tokenExpiresAt));
+
+            // Fetch user profile and save
+            await this.fetchUserProfile();
+
             this.notifyStatus('connected', 'متصل به گوگل درایو');
             this.startPolling();
-            resolve(this.accessToken);
           }
         });
         resolve();
@@ -74,25 +86,120 @@ export class GoogleDriveProvider {
     });
   }
 
+  // Interactive Sign In with Consent Dialog
   async signIn() {
     if (!this.tokenClient) {
       await this.initGis();
     }
-    return new Promise((resolve) => {
-      // Prompt user for OAuth consent
-      this.tokenClient.requestAccessToken({ prompt: 'consent' });
-      const checkToken = setInterval(() => {
-        if (this.isConnected()) {
+
+    return new Promise((resolve, reject) => {
+      try {
+        this.tokenClient.requestAccessToken({ prompt: 'consent' });
+        const checkToken = setInterval(() => {
+          if (this.isConnected()) {
+            clearInterval(checkToken);
+            resolve(this.accessToken);
+          }
+        }, 500);
+
+        // Timeout after 60s
+        setTimeout(() => {
           clearInterval(checkToken);
-          resolve(this.accessToken);
-        }
-      }, 500);
+          if (!this.isConnected()) {
+            reject(new Error('زمان ورود به حساب گوگل به پایان رسید یا پنجره بسته شد.'));
+          }
+        }, 60000);
+      } catch (e) {
+        reject(e);
+      }
     });
+  }
+
+  // Silent Background Token Refresh (without prompt)
+  async refreshTokenSilently() {
+    if (!this.tokenClient) {
+      await this.initGis();
+    }
+    try {
+      this.tokenClient.requestAccessToken({ prompt: '' });
+    } catch (e) {
+      console.warn('Silent refresh error:', e);
+    }
+  }
+
+  // Fetch logged-in Google profile
+  async fetchUserProfile() {
+    if (!this.accessToken) return null;
+    try {
+      const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+        headers: { Authorization: `Bearer ${this.accessToken}` }
+      });
+      if (res.ok) {
+        this.googleUser = await res.json();
+        localStorage.setItem('gdrive_google_user', JSON.stringify(this.googleUser));
+        return this.googleUser;
+      }
+    } catch (err) {
+      console.warn('Could not fetch Google profile:', err);
+    }
+    return null;
+  }
+
+  // Automatic Session Restoration on Page Reload / Startup
+  async autoRestoreSession() {
+    if (!this.isConfigured()) return false;
+
+    try {
+      await this.initGis();
+
+      if (this.isConnected()) {
+        // Token is still valid!
+        console.log('Restored valid Google Drive session from localStorage.');
+        this.notifyStatus('connected', 'متصل به گوگل درایو');
+        this.startPolling();
+
+        // Check if token will expire in less than 5 minutes -> refresh silently
+        if (Date.now() > this.tokenExpiresAt - 300000) {
+          this.refreshTokenSilently();
+        }
+        return true;
+      } else if (this.accessToken) {
+        // Token expired, attempt silent background refresh
+        console.log('Google token expired, attempting silent refresh...');
+        await this.refreshTokenSilently();
+        return this.isConnected();
+      }
+    } catch (err) {
+      console.warn('Failed to restore Google session:', err);
+    }
+    return false;
+  }
+
+  // Sign out cleanly
+  signOut() {
+    if (this.accessToken && window.google?.accounts?.oauth2) {
+      try {
+        window.google.accounts.oauth2.revoke(this.accessToken, () => {});
+      } catch (e) {}
+    }
+    this.accessToken = null;
+    this.tokenExpiresAt = 0;
+    this.googleUser = null;
+    this.stopPolling();
+    localStorage.removeItem('gdrive_access_token');
+    localStorage.removeItem('gdrive_token_expires_at');
+    localStorage.removeItem('gdrive_google_user');
+    this.notifyStatus('idle', 'قطع ارتباط');
   }
 
   notifyStatus(status, message) {
     if (typeof this.onStatusChange === 'function') {
-      this.onStatusChange({ status, message, lastSync: new Date().toISOString() });
+      this.onStatusChange({
+        status,
+        message,
+        googleUser: this.googleUser,
+        lastSync: new Date().toISOString()
+      });
     }
   }
 
@@ -111,7 +218,6 @@ export class GoogleDriveProvider {
   // Fetch or create the shared database file in Google Drive
   async getOrCreateDataFile() {
     if (this.fileId) {
-      // Check if file still exists
       try {
         const res = await fetch(`https://www.googleapis.com/drive/v3/files/${this.fileId}?fields=id,name,modifiedTime`, {
           headers: { Authorization: `Bearer ${this.accessToken}` }
@@ -120,9 +226,12 @@ export class GoogleDriveProvider {
           const info = await res.json();
           this.lastModifiedTime = info.modifiedTime;
           return this.fileId;
+        } else if (res.status === 401) {
+          // Token expired, refresh
+          await this.refreshTokenSilently();
         }
       } catch (e) {
-        console.warn('Existing file check failed, creating or finding new file', e);
+        console.warn('Existing file check error, checking search...', e);
       }
     }
 
@@ -142,7 +251,7 @@ export class GoogleDriveProvider {
       }
     }
 
-    // Create a new data file in Google Drive
+    // Create new data file in Google Drive
     const metadata = {
       name: 'mana_ticketing_data.json',
       mimeType: 'application/json',
@@ -180,6 +289,8 @@ export class GoogleDriveProvider {
         const text = await res.text();
         if (!text || text.trim() === '') return null;
         return JSON.parse(text);
+      } else if (res.status === 401) {
+        await this.refreshTokenSilently();
       }
       return null;
     } catch (e) {
@@ -238,7 +349,6 @@ export class GoogleDriveProvider {
     const metaPart = `Content-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}`;
     const mediaPartHeader = `\r\n--${boundary}\r\nContent-Type: ${file.type || 'application/octet-stream'}\r\n\r\n`;
 
-    // Construct multipart body
     const enc = new TextEncoder();
     const p1 = enc.encode(delimiter + metaPart + mediaPartHeader);
     const p2 = new Uint8Array(fileBuffer);
@@ -264,7 +374,6 @@ export class GoogleDriveProvider {
 
     const uploaded = await uploadRes.json();
 
-    // Make viewable by anyone with link or team
     try {
       await fetch(`https://www.googleapis.com/drive/v3/files/${uploaded.id}/permissions`, {
         method: 'POST',
@@ -316,6 +425,9 @@ export class GoogleDriveProvider {
             }
           }
           this.notifyStatus('connected', 'همگام (در حال پایش هر ' + (this.pollIntervalMs / 1000) + ' ثانیه)');
+        } else if (checkRes.status === 401) {
+          // Token expired, refresh
+          await this.refreshTokenSilently();
         }
       } catch (err) {
         console.warn('Google Drive poll check failed:', err);
