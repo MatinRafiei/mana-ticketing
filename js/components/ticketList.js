@@ -99,6 +99,23 @@ export class TicketListComponent {
           </div>
         ` : ''}
 
+        <!-- Google Drive Shared Team Link Card (Visible if connected) -->
+        ${state.storageMode === 'gdrive' && state.gdriveProvider.isConnected() ? `
+          <div class="bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-2xl p-3 sm:p-4 flex items-center justify-between flex-wrap gap-2.5 shadow-sm">
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span class="text-xs font-bold text-slate-800 dark:text-slate-200">دیتابیس ابری سازمانی متصل است</span>
+              <span class="text-[10px] text-slate-400 font-mono hidden sm:inline">(${state.gdriveProvider.fileId ? state.gdriveProvider.fileId.slice(0, 16) + '...' : ''})</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <button id="btn-quick-copy-invite" class="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-sm">
+                ${renderIcon('share', 'w-3.5 h-3.5')}
+                <span>کپی لینک اتصال همکاران (اتصال به همین دیتابیس)</span>
+              </button>
+            </div>
+          </div>
+        ` : ''}
+
         <!-- Header / Filters Card -->
         <div class="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 shadow-sm">
 
@@ -347,6 +364,19 @@ export class TicketListComponent {
     document.getElementById('btn-banner-go-admin')?.addEventListener('click', () => {
       state.currentView = 'admin';
       state.emit('view_changed', 'admin');
+    });
+
+    document.getElementById('btn-quick-copy-invite')?.addEventListener('click', () => {
+      const inviteLink = state.gdriveProvider.getInviteLink();
+      navigator.clipboard.writeText(inviteLink).then(() => {
+        notificationEngine.triggerToast({
+          title: 'لینک اتصال همکاران کپی شد',
+          message: 'این لینک را در گوشی باز کنید یا برای همکارانتان بفرستید تا فوراً به همین پایگاه داده متصل شوند.',
+          type: 'success'
+        });
+      }).catch(() => {
+        prompt('لینک زیر را کپی کنید:', inviteLink);
+      });
     });
   }
 }

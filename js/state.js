@@ -439,20 +439,23 @@ class StateManager {
     let matchedUser = this.users.find(u => u.email?.toLowerCase().trim() === email);
 
     if (!matchedUser) {
-      // First connected Google account automatically becomes the Organization Admin!
-      const isFirstGoogle = !this.users.some(u => u.id.startsWith('u_g_'));
+      // If there is already an admin in the company database, new Google users become members
+      const hasExistingAdmin = this.users.some(u => u.roleId === 'admin' && !['u1', 'u2', 'u3', 'u4', 'u5', 'u6'].includes(u.id));
       const initials = (gUser.name || 'کاربر گوگل').split(' ').map(p => p[0]).join('‌');
       matchedUser = {
         id: 'u_g_' + (gUser.sub || Date.now()),
         name: gUser.name || email.split('@')[0],
         email: email,
-        roleId: isFirstGoogle ? 'admin' : 'staff',
-        department: isFirstGoogle ? 'مدیریت و فناوری' : 'پرسنل گوگل',
+        roleId: hasExistingAdmin ? 'member' : 'admin',
+        department: hasExistingAdmin ? 'پرسنل' : 'مدیریت و فناوری',
         avatar: gUser.picture || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120',
         initials: initials || 'گ‌ک'
       };
       this.users.unshift(matchedUser);
       this.persistLocal();
+      if (this.storageMode === 'gdrive' && this.gdriveProvider.isConnected()) {
+        this.persistCurrentData();
+      }
     } else {
       if (gUser.picture && matchedUser.avatar !== gUser.picture) {
         matchedUser.avatar = gUser.picture;

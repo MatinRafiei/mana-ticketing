@@ -108,6 +108,56 @@ export class SettingsModalComponent {
               </div>
             ` : ''}
 
+            <!-- Shared Organization Database Card (Multi-user Sync Engine) -->
+            <div class="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/40 border-2 border-blue-200 dark:border-blue-800 rounded-2xl p-4 space-y-3 shadow-sm">
+              <div class="flex items-center justify-between flex-wrap gap-2">
+                <div class="flex items-center gap-2.5">
+                  <span class="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0">
+                    ${renderIcon('share', 'w-4 h-4')}
+                  </span>
+                  <div>
+                    <h4 class="font-bold text-xs sm:text-sm text-slate-900 dark:text-white">پایگاه داده مشترک سازمانی (سینک همکاران)</h4>
+                    <p class="text-[11px] text-slate-600 dark:text-slate-300">اتصال همه اعضای تیم به یک پایگاه داده یکسان در گوگل درایو</p>
+                  </div>
+                </div>
+                ${gdrive.fileId ? `
+                  <span class="text-[10px] bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 font-bold px-2.5 py-1 rounded-lg">
+                    دیتابیس متصل است
+                  </span>
+                ` : `
+                  <span class="text-[10px] bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 font-bold px-2.5 py-1 rounded-lg">
+                    هنوز فایلی متصل نشده
+                  </span>
+                `}
+              </div>
+
+              <!-- Database File ID & Switcher -->
+              <div class="space-y-1">
+                <label class="block text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                  شناسه فایل دیتابیس در گوگل درایو (File ID):
+                </label>
+                <div class="flex items-center gap-2">
+                  <input type="text" id="input-shared-file-id" value="${gdrive.fileId || ''}" placeholder="شناسه فایل یا اتصال خودکار..." class="flex-1 px-3 py-1.5 font-mono bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs dark:text-white" />
+                  <button type="button" id="btn-apply-file-id" class="px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-xs font-bold transition">
+                    اتصال به این فایل
+                  </button>
+                </div>
+              </div>
+
+              <!-- Quick Action Buttons -->
+              <div class="flex items-center gap-2 flex-wrap pt-1 border-t border-blue-200 dark:border-blue-800/60">
+                <button type="button" id="btn-copy-invite-link" class="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md shadow-blue-500/20 transition flex items-center gap-1.5">
+                  ${renderIcon('copy', 'w-4 h-4')}
+                  <span>کپی لینک دعوت همکاران (اتصال فوری)</span>
+                </button>
+
+                <button type="button" id="btn-make-file-shared" class="px-3.5 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 hover:bg-slate-50 text-slate-700 dark:text-slate-200 text-xs font-bold transition flex items-center gap-1.5">
+                  ${renderIcon('shield', 'w-4 h-4 text-emerald-500')}
+                  <span>عمومی‌سازی دسترسی فایل (اشتراک با لینک)</span>
+                </button>
+              </div>
+            </div>
+
             <!-- Google Drive API Credentials Form -->
             <div class="space-y-3 sm:space-y-4">
               <div class="flex items-center justify-between">
@@ -293,6 +343,65 @@ export class SettingsModalComponent {
       } finally {
         btn.disabled = false;
         btn.innerHTML = 'ورود با حساب گوگل';
+      }
+    });
+
+    // Copy Invite Link
+    document.getElementById('btn-copy-invite-link')?.addEventListener('click', () => {
+      const inviteLink = state.gdriveProvider.getInviteLink();
+      navigator.clipboard.writeText(inviteLink).then(() => {
+        notificationEngine.triggerToast({
+          title: 'لینک اتصال مشترک کپی شد',
+          message: 'این لینک را در گوشی باز کنید یا برای همکارانتان بفرستید تا فوراً به همین پایگاه داده متصل شوند.',
+          type: 'success'
+        });
+      }).catch(() => {
+        prompt('لینک زیر را کپی کنید:', inviteLink);
+      });
+    });
+
+    // Apply specific File ID
+    document.getElementById('btn-apply-file-id')?.addEventListener('click', async () => {
+      const fileIdInput = document.getElementById('input-shared-file-id');
+      const newFileId = fileIdInput?.value.trim();
+      if (!newFileId) {
+        alert('لطفاً شناسه فایل دیتابیس را وارد نمایید.');
+        return;
+      }
+      state.gdriveProvider.setFileId(newFileId);
+      state.storageMode = 'gdrive';
+      localStorage.setItem('storage_mode', 'gdrive');
+      notificationEngine.triggerToast({
+        title: 'شناسه پایگاه داده تغییر یافت',
+        message: 'در حال بارگذاری اطلاعات از فایل مشترک...',
+        type: 'info'
+      });
+      if (state.gdriveProvider.isConnected()) {
+        const fresh = await state.gdriveProvider.load();
+        if (fresh) state.handleRemoteData(fresh, 'gdrive');
+      }
+      this.render();
+    });
+
+    // Make File Shared with Link
+    document.getElementById('btn-make-file-shared')?.addEventListener('click', async () => {
+      if (!state.gdriveProvider.isConnected()) {
+        alert('ابتدا باید با حساب گوگل وارد شوید.');
+        return;
+      }
+      const ok = await state.gdriveProvider.makeFileShared();
+      if (ok) {
+        notificationEngine.triggerToast({
+          title: 'دسترسی همگانی فعال شد',
+          message: 'فایل پایگاه داده اکنون برای همه همکاران دارای لینک قابل خواندن و نوشتن است.',
+          type: 'success'
+        });
+      } else {
+        notificationEngine.triggerToast({
+          title: 'خطا در فعال‌سازی',
+          message: 'امکان تغییر دسترسی فایل در درایو فراهم نشد.',
+          type: 'error'
+        });
       }
     });
   }

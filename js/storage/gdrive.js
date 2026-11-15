@@ -215,11 +215,53 @@ export class GoogleDriveProvider {
     });
   }
 
+  // Update or switch target database file ID
+  setFileId(id) {
+    this.fileId = (id || '').trim();
+    if (this.fileId) {
+      localStorage.setItem('gdrive_file_id', this.fileId);
+    } else {
+      localStorage.removeItem('gdrive_file_id');
+    }
+  }
+
+  // Generate shareable invite link with Client ID and Database File ID
+  getInviteLink() {
+    const origin = window.location.origin + window.location.pathname;
+    const params = new URLSearchParams();
+    if (this.fileId) params.set('db', this.fileId);
+    if (this.clientId) params.set('client_id', this.clientId);
+    return `${origin}?${params.toString()}`;
+  }
+
+  // Ensure file is shared with link (anyone with link can read/write)
+  async makeFileShared(targetFileId = this.fileId) {
+    if (!targetFileId || !this.accessToken) return false;
+    try {
+      const res = await fetch(`https://www.googleapis.com/drive/v3/files/${targetFileId}/permissions`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          role: 'writer',
+          type: 'anyone'
+        })
+      });
+      return res.ok;
+    } catch (e) {
+      console.warn('Could not set permissions on data file:', e);
+      return false;
+    }
+  }
+
   // Fetch or create the shared database file in Google Drive
   async getOrCreateDataFile() {
+    // 1. If explicit fileId is already saved (e.g. from invite link or settings), use it!
     if (this.fileId) {
       try {
-        const res = await fetch(`https://www.googleapis.com/drive/v3/files/${this.fileId}?fields=id,name,modifiedTime`, {
+        const res = await fetch(`https://www.googleapis.com/drive/v3/files/${this.fileId}?fields=id,name,modifiedTime&supportsAllDrives=true`, {
           headers: { Authorization: `Bearer ${this.accessToken}` }
         });
         if (res.ok) {
@@ -227,7 +269,6 @@ export class GoogleDriveProvider {
           this.lastModifiedTime = info.modifiedTime;
           return this.fileId;
         } else if (res.status === 401) {
-          // Token expired, refresh
           await this.refreshTokenSilently();
         }
       } catch (e) {
@@ -235,30 +276,54 @@ export class GoogleDriveProvider {
       }
     }
 
-    // Search for existing file named mana_ticketing_data.json
-    const q = "name = 'mana_ticketing_data.json' and trashed = false";
-    const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,modifiedTime)`, {
-      headers: { Authorization: `Bearer ${this.accessToken}` }
-    });
-
-    if (searchRes.ok) {
-      const data = await searchRes.json();
-      if (data.files && data.files.length > 0) {
-        this.fileId = data.files[0].id;
-        this.lastModifiedTime = data.files[0].modifiedTime;
-        localStorage.setItem('gdrive_file_id', this.fileId);
-        return this.fileId;
+    // 2. Search in shared files first (files shared by colleagues/admin)
+    try {
+      const sharedQ = "sharedWithMe = true and name = 'mana_ticketing_data.json' and trashed = false";
+      const sharedRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(sharedQ)}&fields=files(id,name,modifiedTime)&supportsAllDrives=true&includeItemsFromAllDrives=true`, {
+        headers: { Authorization: `Bearer ${this.accessToken}` }
+      });
+      if (sharedRes.ok) {
+        const data = await sharedRes.json();
+        if (data.files && data.files.length > 0) {
+          this.fileId = data.files[0].id;
+          this.lastModifiedTime = data.files[0].modifiedTime;
+          localStorage.setItem('gdrive_file_id', this.fileId);
+          console.log('Found shared organization database:', this.fileId);
+          return this.fileId;
+        }
       }
+    } catch (sharedErr) {
+      console.warn('Shared file query warning:', sharedErr);
     }
 
-    // Create new data file in Google Drive
+    // 3. Search for existing file named mana_ticketing_data.json in user's own Drive
+    try {
+      const ownQ = "name = 'mana_ticketing_data.json' and trashed = false";
+      const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(ownQ)}&fields=files(id,name,modifiedTime)&supportsAllDrives=true&includeItemsFromAllDrives=true`, {
+        headers: { Authorization: `Bearer ${this.accessToken}` }
+      });
+
+      if (searchRes.ok) {
+        const data = await searchRes.json();
+        if (data.files && data.files.length > 0) {
+          this.fileId = data.files[0].id;
+          this.lastModifiedTime = data.files[0].modifiedTime;
+          localStorage.setItem('gdrive_file_id', this.fileId);
+          return this.fileId;
+        }
+      }
+    } catch (ownErr) {
+      console.warn('Own drive search warning:', ownErr);
+    }
+
+    // 4. Create new data file in Google Drive as root database
     const metadata = {
       name: 'mana_ticketing_data.json',
       mimeType: 'application/json',
       description: 'Mana Persian In-Company Ticketing App Storage'
     };
 
-    const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+    const createRes = await fetch('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${this.accessToken}`,
@@ -274,6 +339,10 @@ export class GoogleDriveProvider {
     const created = await createRes.json();
     this.fileId = created.id;
     localStorage.setItem('gdrive_file_id', this.fileId);
+
+    // Make newly created file shared so team members can access it
+    await this.makeFileShared(this.fileId);
+
     return this.fileId;
   }
 

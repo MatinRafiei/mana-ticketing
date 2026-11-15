@@ -51,9 +51,29 @@ class App {
       this.handleStateEvent(eventType, payload);
     });
 
-    // 7. Check URL for ticket query param (e.g. ?ticket=TCK-101)
+    // 7. Check URL for ticket query param or shared database invite link
     const urlParams = new URLSearchParams(window.location.search);
     const initialTicketId = urlParams.get('ticket');
+    const sharedDbId = urlParams.get('db');
+    const sharedClientId = urlParams.get('client_id');
+
+    if (sharedClientId) {
+      state.gdriveProvider.saveConfig(sharedClientId, state.gdriveProvider.apiKey, state.gdriveProvider.pollIntervalMs / 1000);
+      localStorage.setItem('storage_mode', 'gdrive');
+      state.storageMode = 'gdrive';
+    }
+
+    if (sharedDbId) {
+      state.gdriveProvider.setFileId(sharedDbId);
+      localStorage.setItem('storage_mode', 'gdrive');
+      state.storageMode = 'gdrive';
+      notificationEngine.triggerToast({
+        title: 'شناسه پایگاه داده دریافت شد',
+        message: 'در حال همگام‌سازی با پایگاه داده مشترک سازمان...',
+        type: 'info'
+      });
+    }
+
     if (initialTicketId) {
       setTimeout(() => {
         this.ticketDetail.open(initialTicketId);
