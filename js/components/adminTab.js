@@ -321,7 +321,13 @@ export class AdminTabComponent {
                 <h3 class="text-sm sm:text-base font-bold text-slate-900 dark:text-white">اعضای تیم و پرسنل</h3>
                 <p class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">تخصیص نقش‌ها و ایمیل‌های حساب گوگل</p>
               </div>
-              <div class="flex items-center gap-2">
+              <div class="flex items-center gap-2 flex-wrap">
+                ${state.storageMode === 'gdrive' && state.gdriveProvider.isConnected() ? `
+                  <button id="btn-sync-all-drive-perms" class="px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 text-xs font-bold transition flex items-center gap-1.5 hover:bg-emerald-100 shadow-sm" title="اشتراک‌گذاری مستقیم دیتابیس در گوگل درایو با تمام همکاران">
+                    ${renderIcon('share', 'w-3.5 h-3.5 text-emerald-600')}
+                    <span>اشتراک‌گذاری درایو با همه همکاران</span>
+                  </button>
+                ` : ''}
                 ${state.users.some(u => ['u1', 'u2', 'u3', 'u4', 'u5', 'u6'].includes(u.id)) ? `
                   <button id="btn-clear-demo-users" class="px-3 py-1.5 rounded-xl border border-rose-300 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-xs font-semibold transition flex items-center gap-1">
                     ${renderIcon('trash', 'w-3.5 h-3.5')}
@@ -579,16 +585,48 @@ export class AdminTabComponent {
       const department = document.getElementById('user-dept').value.trim();
       const roleId = document.getElementById('user-role-select').value;
 
-      if (!name || !email) return;
-
       await state.addUser({ name, email, department, roleId });
+
+      if (state.storageMode === 'gdrive' && state.gdriveProvider.isConnected()) {
+        await state.gdriveProvider.shareFileWithUser(email, 'writer');
+      }
+
       notificationEngine.triggerToast({
         title: 'عضو جدید اضافه شد',
-        message: `${name} با نقش انتخاب شده افزوده شد.`,
+        message: `${name} با نقش انتخاب شده افزوده شد و دسترسی درایو فعال گردید.`,
         type: 'success'
       });
       this.isAddingUser = false;
       this.render();
+    });
+
+    // Bulk Sync Drive Permissions to all team members
+    document.getElementById('btn-sync-all-drive-perms')?.addEventListener('click', async () => {
+      const btn = document.getElementById('btn-sync-all-drive-perms');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = 'در حال ثبت در گوگل درایو...';
+      }
+      try {
+        const currentGoogleEmail = state.gdriveProvider.googleUser?.email?.toLowerCase();
+        let successCount = 0;
+        for (const u of state.users) {
+          if (u.email && u.email.includes('@') && u.email.toLowerCase() !== currentGoogleEmail) {
+            const ok = await state.gdriveProvider.shareFileWithUser(u.email, 'writer');
+            if (ok) successCount++;
+          }
+        }
+        notificationEngine.triggerToast({
+          title: 'دسترسی‌های گوگل درایو اعطا شد',
+          message: `فایل پایگاه داده با ${toPersianDigits(successCount)} عضو تیم در گوگل درایو به اشتراک گذاشته شد.`,
+          type: 'success'
+        });
+      } catch (err) {
+        alert('خطا در اشتراک‌گذاری: ' + err.message);
+      } finally {
+        if (btn) btn.disabled = false;
+        this.render();
+      }
     });
 
     this.container.querySelectorAll('.role-changer-select').forEach(sel => {

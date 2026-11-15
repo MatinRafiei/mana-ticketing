@@ -234,11 +234,42 @@ export class GoogleDriveProvider {
     return `${origin}?${params.toString()}`;
   }
 
-  // Ensure file is shared with link (anyone with link can read/write)
+  // Share database file directly with a colleague's Google email
+  async shareFileWithUser(email, role = 'writer') {
+    if (!this.fileId || !this.accessToken || !email) return false;
+    try {
+      const res = await fetch(`https://www.googleapis.com/drive/v3/files/${this.fileId}/permissions?supportsAllDrives=true&sendNotificationEmail=false`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          role: role,
+          type: 'user',
+          emailAddress: email.trim().toLowerCase()
+        })
+      });
+      if (res.ok) {
+        console.log(`Shared database with ${email}`);
+        return true;
+      } else {
+        const err = await res.json().catch(() => ({}));
+        if (err.error?.message?.includes('already has access')) return true;
+        console.warn(`Could not share with ${email}:`, err);
+        return false;
+      }
+    } catch (e) {
+      console.warn('Share file error:', e);
+      return false;
+    }
+  }
+
+  // Ensure file is shared with link
   async makeFileShared(targetFileId = this.fileId) {
     if (!targetFileId || !this.accessToken) return false;
     try {
-      const res = await fetch(`https://www.googleapis.com/drive/v3/files/${targetFileId}/permissions`, {
+      const res = await fetch(`https://www.googleapis.com/drive/v3/files/${targetFileId}/permissions?supportsAllDrives=true`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${this.accessToken}`,
@@ -258,7 +289,28 @@ export class GoogleDriveProvider {
 
   // Fetch or create the shared database file in Google Drive
   async getOrCreateDataFile() {
-    // 1. If explicit fileId is already saved (e.g. from invite link or settings), use it!
+    // 1. TOP PRIORITY: Search in 'sharedWithMe' first!
+    // If an Admin has shared the company database file with this account, it MUST take priority over any local/empty files.
+    try {
+      const sharedQ = "name = 'mana_ticketing_data.json' and trashed = false and sharedWithMe = true";
+      const sharedRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(sharedQ)}&fields=files(id,name,modifiedTime,owners)&supportsAllDrives=true&includeItemsFromAllDrives=true`, {
+        headers: { Authorization: `Bearer ${this.accessToken}` }
+      });
+      if (sharedRes.ok) {
+        const data = await sharedRes.json();
+        if (data.files && data.files.length > 0) {
+          this.fileId = data.files[0].id;
+          this.lastModifiedTime = data.files[0].modifiedTime;
+          localStorage.setItem('gdrive_file_id', this.fileId);
+          console.log('Successfully connected to Admin shared database file:', this.fileId);
+          return this.fileId;
+        }
+      }
+    } catch (sharedErr) {
+      console.warn('Shared file query notice:', sharedErr);
+    }
+
+    // 2. If explicit fileId is already saved (e.g. from invite link or settings), verify it!
     if (this.fileId) {
       try {
         const res = await fetch(`https://www.googleapis.com/drive/v3/files/${this.fileId}?fields=id,name,modifiedTime&supportsAllDrives=true`, {
@@ -274,26 +326,6 @@ export class GoogleDriveProvider {
       } catch (e) {
         console.warn('Existing file check error, checking search...', e);
       }
-    }
-
-    // 2. Search in shared files first (files shared by colleagues/admin)
-    try {
-      const sharedQ = "sharedWithMe = true and name = 'mana_ticketing_data.json' and trashed = false";
-      const sharedRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(sharedQ)}&fields=files(id,name,modifiedTime)&supportsAllDrives=true&includeItemsFromAllDrives=true`, {
-        headers: { Authorization: `Bearer ${this.accessToken}` }
-      });
-      if (sharedRes.ok) {
-        const data = await sharedRes.json();
-        if (data.files && data.files.length > 0) {
-          this.fileId = data.files[0].id;
-          this.lastModifiedTime = data.files[0].modifiedTime;
-          localStorage.setItem('gdrive_file_id', this.fileId);
-          console.log('Found shared organization database:', this.fileId);
-          return this.fileId;
-        }
-      }
-    } catch (sharedErr) {
-      console.warn('Shared file query warning:', sharedErr);
     }
 
     // 3. Search for existing file named mana_ticketing_data.json in user's own Drive
@@ -482,7 +514,7 @@ export class GoogleDriveProvider {
       this.isPolling = true;
 
       try {
-        const checkRes = await fetch(`https://www.googleapis.com/drive/v3/files/${this.fileId}?fields=modifiedTime,version`, {
+        const checkRes = await fetch(`https://www.googleapis.com/drive/v3/files/${this.fileId}?fields=modifiedTime,version&supportsAllDrives=true`, {
           headers: { Authorization: `Bearer ${this.accessToken}` }
         });
 
