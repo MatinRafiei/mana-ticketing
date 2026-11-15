@@ -618,6 +618,27 @@ class StateManager {
     return newRole;
   }
 
+  async deleteRole(roleId) {
+    if (roleId === 'admin') {
+      throw new Error('نقش مدیر ارشد سیستم غیرقابل حذف است.');
+    }
+    const roleToDelete = this.roles.find(r => r.id === roleId);
+    if (!roleToDelete) return false;
+
+    // Fallback role for any users that had this role
+    const fallbackRoleId = this.roles.find(r => r.id !== roleId)?.id || 'admin';
+    this.users.forEach(u => {
+      if (u.roleId === roleId) {
+        u.roleId = fallbackRoleId;
+      }
+    });
+
+    this.roles = this.roles.filter(r => r.id !== roleId);
+    await this.persistCurrentData();
+    this.emit('state_updated');
+    return true;
+  }
+
   async updateUserRole(userId, newRoleId) {
     const user = this.users.find(u => u.id === userId);
     if (!user) return;
@@ -629,7 +650,7 @@ class StateManager {
   async addUser({ name, email, roleId, department }) {
     const initials = name.split(' ').map(p => p[0]).join('‌');
     const newUser = {
-      id: 'u' + (this.users.length + 1),
+      id: 'u_' + Date.now(),
       name: name.trim(),
       email: email.trim(),
       roleId: roleId || 'member',
@@ -641,6 +662,38 @@ class StateManager {
     await this.persistCurrentData();
     this.emit('state_updated');
     return newUser;
+  }
+
+  async deleteUser(userId) {
+    if (this.users.length <= 1) {
+      throw new Error('حداقل یک کاربر در سامانه باید وجود داشته باشد.');
+    }
+    this.users = this.users.filter(u => u.id !== userId);
+    // If active user was deleted, switch to the first remaining user
+    if (this.currentUser.id === userId) {
+      this.currentUser = this.users[0];
+    }
+    await this.persistCurrentData();
+    this.emit('state_updated');
+    return true;
+  }
+
+  async clearDemoUsers() {
+    const googleUser = this.gdrive.getGoogleUser();
+    let keepUser = null;
+    if (googleUser && googleUser.email) {
+      keepUser = this.users.find(u => u.email.toLowerCase() === googleUser.email.toLowerCase());
+    }
+    if (!keepUser) {
+      keepUser = this.currentUser || this.users[0];
+    }
+    // Make sure keepUser has admin role
+    keepUser.roleId = 'admin';
+    this.users = [keepUser];
+    this.currentUser = keepUser;
+    await this.persistCurrentData();
+    this.emit('state_updated');
+    return true;
   }
 
   // Notifications

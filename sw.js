@@ -1,5 +1,5 @@
 // Service Worker for Persian In-Company Ticketing App
-const CACHE_NAME = 'ticketing-v1.2';
+const CACHE_NAME = 'ticketing-v2.1';
 const STATIC_ASSETS = [
   './',
   './index.html',

@@ -44,15 +44,15 @@ export class NavbarComponent {
                 </div>
               </div>
 
-              <!-- Desktop Navigation Tabs (Hidden on mobile) -->
-              <nav class="hidden md:flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
-                <button id="tab-tickets" class="px-4 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 ${state.currentView === 'tickets' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}">
-                  ${renderIcon('ticket', 'w-4 h-4')}
-                  تیکت‌ها
+              <!-- Main Navigation Tabs (Always Visible in Header) -->
+              <nav class="flex items-center gap-0.5 sm:gap-1 bg-slate-100 dark:bg-slate-800 p-0.5 sm:p-1 rounded-xl">
+                <button id="tab-tickets" class="px-2.5 sm:px-4 py-1 sm:py-1.5 text-[11px] sm:text-xs font-bold rounded-lg transition-all flex items-center gap-1 ${state.currentView === 'tickets' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}">
+                  ${renderIcon('ticket', 'w-3.5 h-3.5 sm:w-4 sm:h-4')}
+                  <span>تیکت‌ها</span>
                 </button>
-                <button id="tab-admin" class="px-4 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 ${state.currentView === 'admin' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}">
-                  ${renderIcon('shield', 'w-4 h-4')}
-                  مدیریت و نقش‌ها
+                <button id="tab-admin" class="px-2.5 sm:px-4 py-1 sm:py-1.5 text-[11px] sm:text-xs font-bold rounded-lg transition-all flex items-center gap-1 ${state.currentView === 'admin' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}">
+                  ${renderIcon('shield', 'w-3.5 h-3.5 sm:w-4 sm:h-4')}
+                  <span>مدیریت</span>
                 </button>
               </nav>
             </div>
@@ -186,8 +186,12 @@ export class NavbarComponent {
                     </div>
                   </div>
 
-                  <div class="p-2">
-                    <button id="btn-open-settings" class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50">
+                  <div class="p-2 space-y-1">
+                    <button id="btn-dropdown-admin" class="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition">
+                      ${renderIcon('shield', 'w-4 h-4 text-blue-600 dark:text-blue-400')}
+                      پنل مدیریت و نقش‌ها
+                    </button>
+                    <button id="btn-open-settings" class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50 transition">
                       ${renderIcon('settings', 'w-4 h-4 text-slate-400')}
                       تنظیمات گوگل درایو
                     </button>
@@ -247,6 +251,10 @@ export class NavbarComponent {
     document.getElementById('tab-admin')?.addEventListener('click', () => setView('admin'));
     document.getElementById('bottom-tab-tickets')?.addEventListener('click', () => setView('tickets'));
     document.getElementById('bottom-tab-admin')?.addEventListener('click', () => setView('admin'));
+    document.getElementById('btn-dropdown-admin')?.addEventListener('click', () => {
+      this.isUserMenuOpen = false;
+      setView('admin');
+    });
 
     // New Ticket Buttons (Desktop + Mobile Center FAB)
     const openNewTicket = () => {

@@ -74,6 +74,31 @@ export class TicketListComponent {
     this.container.innerHTML = `
       <div class="space-y-4 sm:space-y-6 pb-20 md:pb-6">
 
+        <!-- Demo Mode Info & Quick Actions Banner -->
+        ${state.tickets.some(t => t.id.startsWith('TCK-10')) ? `
+          <div class="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/40 border-2 border-blue-200 dark:border-blue-800 rounded-2xl p-3.5 sm:p-4 flex items-center justify-between flex-wrap gap-3 shadow-sm">
+            <div class="flex items-center gap-2.5">
+              <span class="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0">
+                ${renderIcon('alertCircle', 'w-4 h-4')}
+              </span>
+              <div>
+                <h4 class="font-bold text-xs sm:text-sm text-slate-900 dark:text-white">در حال مشاهده تیکت‌های تستی اولیه</h4>
+                <p class="text-[11px] text-slate-600 dark:text-slate-300">برای شروع استفاده واقعی، با یک کلیک تیکت‌های دمو را پاک‌سازی نمایید.</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2 mr-auto sm:mr-0">
+              <button id="btn-banner-clear-demo" class="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition flex items-center gap-1 shadow-sm">
+                ${renderIcon('trash', 'w-3.5 h-3.5')}
+                <span>پاک‌سازی تیکت‌های دمو</span>
+              </button>
+              <button id="btn-banner-go-admin" class="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition flex items-center gap-1">
+                ${renderIcon('shield', 'w-3.5 h-3.5')}
+                <span>پنل مدیریت و نقش‌ها</span>
+              </button>
+            </div>
+          </div>
+        ` : ''}
+
         <!-- Header / Filters Card -->
         <div class="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 shadow-sm">
 
@@ -305,6 +330,23 @@ export class TicketListComponent {
     document.getElementById('btn-empty-new-ticket')?.addEventListener('click', () => {
       state.isTicketModalOpen = true;
       state.emit('open_ticket_modal');
+    });
+
+    document.getElementById('btn-banner-clear-demo')?.addEventListener('click', async () => {
+      if (confirm('آیا مطمئن هستید که می‌خواهید کلیه تیکت‌های تستی اولیه را پاک کنید و سامانه را از صفر آغاز نمایید؟')) {
+        await state.clearAllTickets();
+        notificationEngine.triggerToast({
+          title: 'تیکت‌های دمو پاک شدند',
+          message: 'سامانه اکنون کاملاً تمیز و آماده استفاده سازمانی است.',
+          type: 'success'
+        });
+        this.render();
+      }
+    });
+
+    document.getElementById('btn-banner-go-admin')?.addEventListener('click', () => {
+      state.currentView = 'admin';
+      state.emit('view_changed', 'admin');
     });
   }
 }

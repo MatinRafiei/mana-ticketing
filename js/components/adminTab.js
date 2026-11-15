@@ -284,10 +284,15 @@ export class AdminTabComponent {
                     <div>
                       <div class="flex items-center gap-2">
                         <h4 class="font-bold text-xs sm:text-sm text-slate-900 dark:text-white">${r.name}</h4>
-                        ${r.isSystem ? `<span class="bg-slate-100 dark:bg-slate-800 text-[10px] font-bold text-slate-500 px-2 py-0.5 rounded-md">سیستمی</span>` : `<span class="bg-emerald-100 dark:bg-emerald-950/60 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-md">سفارشی</span>`}
+                        ${r.id === 'admin' ? `<span class="bg-blue-100 dark:bg-blue-900/60 text-[10px] font-bold text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-md">مدیر سیستم</span>` : r.isSystem ? `<span class="bg-slate-100 dark:bg-slate-800 text-[10px] font-bold text-slate-500 px-2 py-0.5 rounded-md">پیش‌فرض</span>` : `<span class="bg-emerald-100 dark:bg-emerald-950/60 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-md">سفارشی</span>`}
                       </div>
                       <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">${r.description}</p>
                     </div>
+                    ${r.id !== 'admin' ? `
+                      <button class="btn-delete-role p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition" data-role-id="${r.id}" data-role-name="${r.name}" title="حذف این نقش">
+                        ${renderIcon('trash', 'w-4 h-4')}
+                      </button>
+                    ` : ''}
                   </div>
 
                   <div class="pt-2 border-t border-slate-100 dark:border-slate-800">
@@ -316,10 +321,18 @@ export class AdminTabComponent {
                 <h3 class="text-sm sm:text-base font-bold text-slate-900 dark:text-white">اعضای تیم و پرسنل</h3>
                 <p class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">تخصیص نقش‌ها و ایمیل‌های حساب گوگل</p>
               </div>
-              <button id="btn-show-add-user" class="px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-blue-500/20">
-                ${renderIcon('plus', 'w-4 h-4')}
-                افزودن عضو جدید
-              </button>
+              <div class="flex items-center gap-2">
+                ${state.users.some(u => ['u1', 'u2', 'u3', 'u4', 'u5', 'u6'].includes(u.id)) ? `
+                  <button id="btn-clear-demo-users" class="px-3 py-1.5 rounded-xl border border-rose-300 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-xs font-semibold transition flex items-center gap-1">
+                    ${renderIcon('trash', 'w-3.5 h-3.5')}
+                    <span>پاک‌سازی کاربران دمو</span>
+                  </button>
+                ` : ''}
+                <button id="btn-show-add-user" class="px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-blue-500/20">
+                  ${renderIcon('plus', 'w-4 h-4')}
+                  افزودن عضو جدید
+                </button>
+              </div>
             </div>
 
             <!-- Add User Form -->
@@ -379,12 +392,19 @@ export class AdminTabComponent {
                     </div>
 
                     <div class="flex items-center justify-between pt-1">
-                      <span class="text-[10px] text-slate-400 font-bold">نقش:</span>
-                      <select class="role-changer-select text-xs px-2 py-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white" data-user-id="${user.id}">
-                        ${state.roles.map(r => `
-                          <option value="${r.id}" ${r.id === user.roleId ? 'selected' : ''}>${r.name.split(' ')[0]}</option>
-                        `).join('')}
-                      </select>
+                      <div class="flex items-center gap-1.5">
+                        <span class="text-[10px] text-slate-400 font-bold">نقش:</span>
+                        <select class="role-changer-select text-xs px-2 py-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white" data-user-id="${user.id}">
+                          ${state.roles.map(r => `
+                            <option value="${r.id}" ${r.id === user.roleId ? 'selected' : ''}>${r.name.split(' ')[0]}</option>
+                          `).join('')}
+                        </select>
+                      </div>
+                      ${state.users.length > 1 ? `
+                        <button class="btn-delete-user p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition" data-user-id="${user.id}" data-user-name="${user.name}" title="حذف کاربر">
+                          ${renderIcon('trash', 'w-4 h-4')}
+                        </button>
+                      ` : ''}
                     </div>
                   </div>
                 `).join('')}
@@ -400,6 +420,7 @@ export class AdminTabComponent {
                       <th class="py-3 px-4 font-bold">واحد</th>
                       <th class="py-3 px-4 font-bold">نقش کنونی</th>
                       <th class="py-3 px-4 font-bold">تغییر نقش</th>
+                      <th class="py-3 px-4 font-bold text-center">عملیات</th>
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
@@ -427,6 +448,13 @@ export class AdminTabComponent {
                               <option value="${r.id}" ${r.id === user.roleId ? 'selected' : ''}>${r.name.split(' ')[0]}</option>
                             `).join('')}
                           </select>
+                        </td>
+                        <td class="py-3 px-4 text-center">
+                          ${state.users.length > 1 ? `
+                            <button class="btn-delete-user p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition" data-user-id="${user.id}" data-user-name="${user.name}" title="حذف کاربر">
+                              ${renderIcon('trash', 'w-4 h-4')}
+                            </button>
+                          ` : ''}
                         </td>
                       </tr>
                     `).join('')}
@@ -574,6 +602,63 @@ export class AdminTabComponent {
           type: 'info'
         });
       });
+    });
+
+    // Delete Role Handler
+    this.container.querySelectorAll('.btn-delete-role').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const roleId = btn.getAttribute('data-role-id');
+        const roleName = btn.getAttribute('data-role-name') || 'این نقش';
+        if (confirm(`آیا از حذف نقش «${roleName}» اطمینان دارید؟ در صورت حذف، کاربران دارای این نقش به سایر نقش‌ها منتقل می‌شوند.`)) {
+          try {
+            await state.deleteRole(roleId);
+            notificationEngine.triggerToast({
+              title: 'نقش حذف شد',
+              message: `نقش «${roleName}» با موفقیت حذف گردید.`,
+              type: 'info'
+            });
+            this.render();
+          } catch (err) {
+            alert(err.message);
+          }
+        }
+      });
+    });
+
+    // Delete User Handler
+    this.container.querySelectorAll('.btn-delete-user').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const userId = btn.getAttribute('data-user-id');
+        const userName = btn.getAttribute('data-user-name') || 'همکار';
+        if (confirm(`آیا از حذف «${userName}» از سیستم اطمینان دارید؟`)) {
+          try {
+            await state.deleteUser(userId);
+            notificationEngine.triggerToast({
+              title: 'همکار حذف شد',
+              message: `کاربر «${userName}» با موفقیت حذف شد.`,
+              type: 'info'
+            });
+            this.render();
+          } catch (err) {
+            alert(err.message);
+          }
+        }
+      });
+    });
+
+    // Clear Demo Users Handler
+    document.getElementById('btn-clear-demo-users')?.addEventListener('click', async () => {
+      if (confirm('آیا مطمئن هستید که می‌خواهید همه کاربران دمو را پاک کنید؟ حساب شما به عنوان مدیر در سامانه حفظ خواهد شد.')) {
+        await state.clearDemoUsers();
+        notificationEngine.triggerToast({
+          title: 'کاربران دمو حذف شدند',
+          message: 'اکنون می‌توانید اعضای واقعی تیم خود را تعریف نمایید.',
+          type: 'success'
+        });
+        this.render();
+      }
     });
   }
 }
