@@ -16,8 +16,13 @@ export class NavbarComponent {
   render() {
     if (!this.container) return;
 
-    const u = state.currentUser;
-    const role = state.getCurrentUserRole();
+    const u = state.currentUser || {
+      name: 'کاربر سیستم',
+      email: '',
+      avatar: './icons/company_logo.png',
+      roleId: 'admin'
+    };
+    const role = state.getCurrentUserRole() || { name: 'مدیر ارشد' };
     const unread = state.unreadCount;
     const isDark = document.documentElement.classList.contains('dark');
     const soundEnabled = sound.enabled;
@@ -32,8 +37,8 @@ export class NavbarComponent {
             <!-- Right: Logo & Desktop Navigation Tabs -->
             <div class="flex items-center gap-3 sm:gap-6 min-w-0">
               <div class="flex items-center gap-2 sm:gap-3 cursor-pointer shrink-0" id="nav-logo">
-                <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20 shrink-0">
-                  ${renderIcon('ticket', 'w-4 h-4 sm:w-5 sm:h-5 text-white')}
+                <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-white dark:bg-slate-800 p-0.5 border border-slate-200/60 dark:border-slate-700/60 flex items-center justify-center shrink-0 shadow-sm">
+                  <img src="./icons/company_logo.png" alt="مانا" class="w-full h-full object-contain rounded-lg" />
                 </div>
                 <div class="truncate">
                   <div class="flex items-center gap-1.5">
@@ -206,6 +211,10 @@ export class NavbarComponent {
                       ${renderIcon('settings', 'w-4 h-4 text-slate-400')}
                       تنظیمات گوگل درایو
                     </button>
+                    <button id="btn-dropdown-factory-reset" class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition">
+                      ${renderIcon('trash', 'w-4 h-4 text-rose-500')}
+                      بازنشانی کامل سامانه (Reset)
+                    </button>
                   </div>
                 </div>
               </div>
@@ -363,6 +372,14 @@ export class NavbarComponent {
       this.isUserMenuOpen = false;
       state.isSettingsModalOpen = true;
       state.emit('open_settings_modal');
+    });
+
+    // Factory Reset from Dropdown
+    document.getElementById('btn-dropdown-factory-reset')?.addEventListener('click', async () => {
+      this.isUserMenuOpen = false;
+      if (confirm('آیا مطمئن هستید که می‌خواهید سامانه را به صورت کامل ریست کنید؟ کلیه داده‌ها، لاگین و تنظیمات مرورگر پاک شده و به نقطه صفر بازمی‌گردد.')) {
+        await state.factoryReset();
+      }
     });
 
     // Close menus on outside click

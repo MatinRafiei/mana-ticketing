@@ -228,6 +228,25 @@ export class SettingsModalComponent {
               </ol>
             </div>
 
+            <!-- Factory Reset / Danger Zone -->
+            <div class="bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 p-3.5 sm:p-4 rounded-2xl space-y-2">
+              <div class="flex items-center justify-between flex-wrap gap-2">
+                <div class="flex items-center gap-2">
+                  <span class="text-rose-600 dark:text-rose-400">
+                    ${renderIcon('alertTriangle', 'w-4 h-4')}
+                  </span>
+                  <span class="font-bold text-xs text-rose-900 dark:text-rose-200">بازنشانی کامل سامانه (Factory Reset)</span>
+                </div>
+                <button type="button" id="btn-factory-reset-modal" class="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-sm shadow-rose-500/20">
+                  ${renderIcon('trash', 'w-3.5 h-3.5')}
+                  <span>شروع مجدد از نقطه صفر</span>
+                </button>
+              </div>
+              <p class="text-[11px] text-rose-700 dark:text-rose-300 leading-relaxed">
+                با کلیک روی این دکمه، کلیه اطلاعات محلی، سشن‌های ذخیره‌شده گوگل و تنظیمات برنامه از مرورگر شما پاک شده و برنامه به حالت خام اولیه برمی‌گردد تا بتوانید فرآیند لاگین و اتصال را مجدداً از صفر انجام دهید.
+              </p>
+            </div>
+
           </div>
 
           <!-- Footer -->
@@ -247,6 +266,12 @@ export class SettingsModalComponent {
   bindEvents() {
     document.getElementById('settings-close-btn')?.addEventListener('click', () => this.close());
     document.getElementById('btn-close-settings-footer')?.addEventListener('click', () => this.close());
+
+    document.getElementById('btn-factory-reset-modal')?.addEventListener('click', async () => {
+      if (confirm('آیا مطمئن هستید که می‌خواهید سامانه را به صورت کامل ریست کنید؟ کلیه حافظه محلی، توکن‌های ورود و تنظیمات پاک شده و برنامه به حالت صفر کارخانه بازمی‌گردد.')) {
+        await state.factoryReset();
+      }
+    });
 
     this.container.querySelectorAll('input[name="storage_mode"]').forEach(radio => {
       radio.addEventListener('change', (e) => {

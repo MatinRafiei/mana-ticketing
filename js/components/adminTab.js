@@ -11,10 +11,36 @@ export class AdminTabComponent {
     this.activeSection = 'overview'; // overview, roles, users
     this.isCreatingRole = false;
     this.isAddingUser = false;
+    this.draftUser = { name: '', email: '', department: '', roleId: 'member' };
+    this.draftRole = { name: '', description: '', permissions: ['create_ticket'] };
   }
 
   render() {
     if (!this.container) return;
+
+    // Preserve ongoing draft inputs if user is currently typing
+    const curUserName = document.getElementById('user-name');
+    if (curUserName) {
+      this.draftUser = {
+        name: curUserName.value,
+        email: document.getElementById('user-email')?.value || '',
+        department: document.getElementById('user-dept')?.value || '',
+        roleId: document.getElementById('user-role-select')?.value || 'member'
+      };
+    }
+    const curRoleName = document.getElementById('role-name');
+    if (curRoleName) {
+      this.draftRole = {
+        name: curRoleName.value,
+        description: document.getElementById('role-desc')?.value || '',
+        permissions: this.draftRole?.permissions || ['create_ticket']
+      };
+    }
+
+    const activeEl = document.activeElement;
+    const activeId = activeEl?.id;
+    const selStart = (activeEl && typeof activeEl.selectionStart === 'number') ? activeEl.selectionStart : null;
+    const selEnd = (activeEl && typeof activeEl.selectionEnd === 'number') ? activeEl.selectionEnd : null;
 
     const totalTickets = state.tickets.length;
     const inProgress = state.tickets.filter(t => t.status === 'open' || t.status === 'in_progress' || t.status === 'waiting').length;
@@ -94,9 +120,9 @@ export class AdminTabComponent {
                 <p class="text-[11px] text-slate-500 dark:text-slate-400">پیشرفت، مهلت‌ها و مسئولین</p>
               </div>
               <div class="flex items-center gap-2 flex-wrap">
-                <button id="btn-clear-demo-tickets" class="px-3 py-1.5 rounded-xl border border-rose-300 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-xs font-semibold transition flex items-center gap-1">
+                <button id="btn-factory-reset-admin" class="px-3 py-1.5 rounded-xl border border-rose-300 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-xs font-semibold transition flex items-center gap-1" title="بازنشانی کامل سامانه و بازگشت به نقطه صفر">
                   ${renderIcon('trash', 'w-3.5 h-3.5')}
-                  <span>پاک‌سازی تیکت‌های دمو</span>
+                  <span>بازنشانی کامل سامانه</span>
                 </button>
                 <button id="btn-export-data" class="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition flex items-center gap-1">
                   ${renderIcon('download', 'w-3.5 h-3.5 text-slate-500')}
@@ -107,7 +133,11 @@ export class AdminTabComponent {
 
             <!-- Mobile View: Responsive Cards List -->
             <div class="block md:hidden divide-y divide-slate-100 dark:divide-slate-800 p-2">
-              ${state.tickets.map(ticket => {
+              ${state.tickets.length === 0 ? `
+                <div class="p-6 text-center text-slate-400 dark:text-slate-500 text-xs">
+                  هیچ تیکتی در سامانه ثبت نشده است. سامانه آماده فعالیت است.
+                </div>
+              ` : state.tickets.map(ticket => {
                 const assignee = state.getUser(ticket.assigneeId);
                 const deadlineInfo = getDeadlineStatus(ticket.deadline);
                 return `
@@ -153,7 +183,13 @@ export class AdminTabComponent {
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
-                  ${state.tickets.map(ticket => {
+                  ${state.tickets.length === 0 ? `
+                    <tr>
+                      <td colspan="9" class="py-8 text-center text-slate-400 dark:text-slate-500 text-xs">
+                        هیچ تیکتی ثبت نشده است. جهت شروع، تیکت جدید ثبت فرمایید.
+                      </td>
+                    </tr>
+                  ` : state.tickets.map(ticket => {
                     const assignee = state.getUser(ticket.assigneeId);
                     const creator = state.getUser(ticket.creatorId);
                     const deadlineInfo = getDeadlineStatus(ticket.deadline);
@@ -219,11 +255,11 @@ export class AdminTabComponent {
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">نام نقش <span class="text-rose-500">*</span></label>
-                    <input type="text" id="role-name" required placeholder="مثال: کارشناس ارشد، بازرس..." class="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs dark:text-white" />
+                    <input type="text" id="role-name" required value="${this.draftRole?.name || ''}" placeholder="مثال: کارشناس ارشد، بازرس..." class="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs dark:text-white" />
                   </div>
                   <div>
                     <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">توضیحات</label>
-                    <input type="text" id="role-desc" placeholder="توضیح مسئولیت‌های نقش..." class="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs dark:text-white" />
+                    <input type="text" id="role-desc" value="${this.draftRole?.description || ''}" placeholder="توضیح مسئولیت‌های نقش..." class="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs dark:text-white" />
                   </div>
                 </div>
 
@@ -328,12 +364,6 @@ export class AdminTabComponent {
                     <span>اشتراک‌گذاری درایو با همه همکاران</span>
                   </button>
                 ` : ''}
-                ${state.users.some(u => ['u1', 'u2', 'u3', 'u4', 'u5', 'u6'].includes(u.id)) ? `
-                  <button id="btn-clear-demo-users" class="px-3 py-1.5 rounded-xl border border-rose-300 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-xs font-semibold transition flex items-center gap-1">
-                    ${renderIcon('trash', 'w-3.5 h-3.5')}
-                    <span>پاک‌سازی کاربران دمو</span>
-                  </button>
-                ` : ''}
                 <button id="btn-show-add-user" class="px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-blue-500/20">
                   ${renderIcon('plus', 'w-4 h-4')}
                   افزودن عضو جدید
@@ -348,23 +378,23 @@ export class AdminTabComponent {
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">نام و نام خانوادگی <span class="text-rose-500">*</span></label>
-                    <input type="text" id="user-name" required placeholder="مثال: رضا صادقی" class="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs dark:text-white" />
+                    <input type="text" id="user-name" required value="${this.draftUser?.name || ''}" placeholder="مثال: رضا صادقی" class="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs dark:text-white" />
                   </div>
                   <div>
                     <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">ایمیل گوگل <span class="text-rose-500">*</span></label>
-                    <input type="email" id="user-email" required placeholder="name@gmail.com" class="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs dark:text-white" />
+                    <input type="email" id="user-email" required value="${this.draftUser?.email || ''}" placeholder="name@gmail.com" class="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs dark:text-white" />
                   </div>
                 </div>
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">واحد سازمانی</label>
-                    <input type="text" id="user-dept" placeholder="مثال: بازرگانی و فروش" class="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs dark:text-white" />
+                    <input type="text" id="user-dept" value="${this.draftUser?.department || ''}" placeholder="مثال: بازرگانی و فروش" class="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs dark:text-white" />
                   </div>
                   <div>
                     <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">نقش سازمانی</label>
                     <select id="user-role-select" class="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs dark:text-white">
-                      ${state.roles.map(r => `<option value="${r.id}">${r.name}</option>`).join('')}
+                      ${state.roles.map(r => `<option value="${r.id}" ${r.id === this.draftUser?.roleId ? 'selected' : ''}>${r.name}</option>`).join('')}
                     </select>
                   </div>
                 </div>
@@ -475,6 +505,17 @@ export class AdminTabComponent {
     `;
 
     this.bindEvents();
+
+    // Restore focus and cursor selection position if an input had active focus
+    if (activeId) {
+      const el = document.getElementById(activeId);
+      if (el) {
+        el.focus();
+        if (selStart !== null && selEnd !== null && typeof el.setSelectionRange === 'function') {
+          el.setSelectionRange(selStart, selEnd);
+        }
+      }
+    }
   }
 
   getPermLabel(perm) {
@@ -509,15 +550,9 @@ export class AdminTabComponent {
       });
     });
 
-    document.getElementById('btn-clear-demo-tickets')?.addEventListener('click', async () => {
-      if (confirm('آیا مطمئن هستید که می‌خواهید کلیه تیکت‌های تستی را پاک کنید و سامانه را از صفر آغاز نمایید؟')) {
-        await state.clearAllTickets();
-        notificationEngine.triggerToast({
-          title: 'تیکت‌های دمو پاک شدند',
-          message: 'سامانه اکنون کاملاً تمیز و آماده ثبت تیکت‌های واقعی است.',
-          type: 'success'
-        });
-        this.render();
+    document.getElementById('btn-factory-reset-admin')?.addEventListener('click', async () => {
+      if (confirm('آیا مطمئن هستید که می‌خواهید سامانه را به صورت کامل ریست کنید؟ کلیه حافظه محلی، توکن‌های ورود و تنظیمات پاک شده و برنامه به حالت اولیه بازمی‌گردد.')) {
+        await state.factoryReset();
       }
     });
 
@@ -544,6 +579,7 @@ export class AdminTabComponent {
 
     document.getElementById('btn-cancel-create-role')?.addEventListener('click', () => {
       this.isCreatingRole = false;
+      this.draftRole = { name: '', description: '', permissions: ['create_ticket'] };
       this.render();
     });
 
@@ -564,6 +600,7 @@ export class AdminTabComponent {
         type: 'success'
       });
       this.isCreatingRole = false;
+      this.draftRole = { name: '', description: '', permissions: ['create_ticket'] };
       this.render();
     });
 
@@ -574,6 +611,7 @@ export class AdminTabComponent {
 
     document.getElementById('btn-cancel-add-user')?.addEventListener('click', () => {
       this.isAddingUser = false;
+      this.draftUser = { name: '', email: '', department: '', roleId: 'member' };
       this.render();
     });
 
@@ -597,6 +635,7 @@ export class AdminTabComponent {
         type: 'success'
       });
       this.isAddingUser = false;
+      this.draftUser = { name: '', email: '', department: '', roleId: 'member' };
       this.render();
     });
 
@@ -684,19 +723,6 @@ export class AdminTabComponent {
           }
         }
       });
-    });
-
-    // Clear Demo Users Handler
-    document.getElementById('btn-clear-demo-users')?.addEventListener('click', async () => {
-      if (confirm('آیا مطمئن هستید که می‌خواهید همه کاربران دمو را پاک کنید؟ حساب شما به عنوان مدیر در سامانه حفظ خواهد شد.')) {
-        await state.clearDemoUsers();
-        notificationEngine.triggerToast({
-          title: 'کاربران دمو حذف شدند',
-          message: 'اکنون می‌توانید اعضای واقعی تیم خود را تعریف نمایید.',
-          type: 'success'
-        });
-        this.render();
-      }
     });
   }
 }

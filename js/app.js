@@ -104,7 +104,12 @@ class App {
       case 'state_updated':
       case 'user_changed':
         this.navbar.render();
-        this.renderCurrentView();
+        // Prevent background polling from destroying active form inputs while user is typing
+        const activeEl = document.activeElement;
+        const isEditingInForm = activeEl && (activeEl.closest('#admin-tab-container') || activeEl.closest('#ticket-modal-container')) && ['INPUT', 'TEXTAREA', 'SELECT'].includes(activeEl.tagName);
+        if (!isEditingInForm) {
+          this.renderCurrentView();
+        }
         break;
 
       case 'view_changed':

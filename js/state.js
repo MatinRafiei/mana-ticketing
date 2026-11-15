@@ -57,181 +57,17 @@ export const DEFAULT_ROLES = [
 
 export const INITIAL_USERS = [
   {
-    id: 'u1',
-    name: 'علی رضایی',
-    email: 'ali.rezaei@company.com',
+    id: 'admin_initial',
+    name: 'مدیر سامانه',
+    email: '',
     roleId: 'admin',
-    department: 'فناوری اطلاعات و زیرساخت',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80',
-    initials: 'ع‌ر'
-  },
-  {
-    id: 'u2',
-    name: 'سارا محمدی',
-    email: 'sara.mohammadi@company.com',
-    roleId: 'manager',
-    department: 'پشتیبانی مشتریان و عملیات',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=120&auto=format&fit=crop&q=80',
-    initials: 'س‌م'
-  },
-  {
-    id: 'u3',
-    name: 'مهدی حسینی',
-    email: 'mehdi.hosseini@company.com',
-    roleId: 'staff',
-    department: 'توسعه نرم‌افزار',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=120&auto=format&fit=crop&q=80',
-    initials: 'م‌ح'
-  },
-  {
-    id: 'u4',
-    name: 'مریم کاظمی',
-    email: 'maryam.kazemi@company.com',
-    roleId: 'staff',
-    department: 'مارکتینگ و فروش',
-    avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=120&auto=format&fit=crop&q=80',
-    initials: 'م‌ک'
-  },
-  {
-    id: 'u5',
-    name: 'پژمان نوری',
-    email: 'pejman.nouri@company.com',
-    roleId: 'staff',
-    department: 'شبکه و امنیت',
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=120&auto=format&fit=crop&q=80',
-    initials: 'پ‌ن'
-  },
-  {
-    id: 'u6',
-    name: 'نگار صادقی',
-    email: 'negar.sadeghi@company.com',
-    roleId: 'member',
-    department: 'منابع انسانی و اداری',
-    avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=120&auto=format&fit=crop&q=80',
-    initials: 'ن‌ص'
+    department: 'مدیریت و راهبری',
+    avatar: './icons/company_logo.png',
+    initials: 'م‌س'
   }
 ];
 
-export const INITIAL_TICKETS = [
-  {
-    id: 'TCK-101',
-    title: 'بررسی اختلال دسترسی به سرور پایگاه‌داده شعبه مرکزی',
-    description: 'از صبح امروز ارتباط با دیتابیس پشتیبان دچار کندی شدید شده است. لطفاً تنظیمات Connection Pool و لاگ‌های خطا را بررسی فرمایید.',
-    creatorId: 'u2',
-    assigneeId: 'u1',
-    taggedUserIds: ['u3', 'u5'],
-    priority: 'urgent', // urgent, high, normal, low
-    status: 'in_progress', // open, in_progress, waiting, resolved, closed
-    department: 'فناوری اطلاعات و زیرساخت',
-    deadline: new Date(Date.now() + 4 * 3600 * 1000).toISOString(), // 4 hours from now
-    createdAt: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
-    updatedAt: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-    attachments: [
-      {
-        id: 'att-1',
-        name: 'database_error_log.txt',
-        size: 45200,
-        type: 'text/plain',
-        url: '#',
-        source: 'local'
-      }
-    ],
-    replies: [
-      {
-        id: 'rep-1',
-        authorId: 'u1',
-        content: 'در حال بررسی لاگ‌های سرور PostgreSQL هستم. به نظر می‌رسد یک کوئری سنگین باعث قفل شدن جدول سفارشات شده است.',
-        createdAt: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
-        attachments: []
-      },
-      {
-        id: 'rep-2',
-        authorId: 'u5',
-        content: 'ترافیک فایروال را هم مانیتور کردم، بسته‌های مشکوک دیده‌نشد. مشکل احتمالاً سمت برنامه است.',
-        createdAt: new Date(Date.now() - 25 * 60 * 1000).toISOString(),
-        attachments: []
-      }
-    ],
-    history: [
-      { action: 'CREATED', actorId: 'u2', timestamp: new Date(Date.now() - 2 * 3600 * 1000).toISOString() },
-      { action: 'STATUS_CHANGE', from: 'open', to: 'in_progress', actorId: 'u1', timestamp: new Date(Date.now() - 45 * 60 * 1000).toISOString() }
-    ]
-  },
-  {
-    id: 'TCK-102',
-    title: 'آماده‌سازی قرارداد همکاری و دسترسی سامانه برای پرسنل جدید',
-    description: 'سه نفر کارشناس جدید از ابتدای هفته آینده به تیم ملحق می‌شوند. لطفاً ایمیل سازمانی و مجوزهای لازم ایجاد شود.',
-    creatorId: 'u6',
-    assigneeId: 'u1',
-    taggedUserIds: ['u2'],
-    priority: 'high',
-    status: 'open',
-    department: 'منابع انسانی و اداری',
-    deadline: new Date(Date.now() + 24 * 3600 * 1000).toISOString(), // tomorrow
-    createdAt: new Date(Date.now() - 5 * 3600 * 1000).toISOString(),
-    updatedAt: new Date(Date.now() - 5 * 3600 * 1000).toISOString(),
-    attachments: [],
-    replies: [],
-    history: [
-      { action: 'CREATED', actorId: 'u6', timestamp: new Date(Date.now() - 5 * 3600 * 1000).toISOString() }
-    ]
-  },
-  {
-    id: 'TCK-103',
-    title: 'طراحی بنر و تیزر معرفی فیچرهای نسخه پاییز برای اینستاگرام',
-    description: 'بنرهای استوری و پست اسلایدی جهت کمپین اطلاع‌رسانی قابلیت‌های جدید اپلیکیشن با تم پاییزه.',
-    creatorId: 'u4',
-    assigneeId: 'u4',
-    taggedUserIds: ['u2', 'u3'],
-    priority: 'normal',
-    status: 'waiting',
-    department: 'مارکتینگ و فروش',
-    deadline: new Date(Date.now() - 8 * 3600 * 1000).toISOString(), // Overdue by 8 hours
-    createdAt: new Date(Date.now() - 48 * 3600 * 1000).toISOString(),
-    updatedAt: new Date(Date.now() - 10 * 3600 * 1000).toISOString(),
-    attachments: [],
-    replies: [
-      {
-        id: 'rep-3',
-        authorId: 'u4',
-        content: 'پیش‌نویس اولیه در فیگما آماده شد، منتظر تایید متن‌های مارکتینگ توسط خانم محمدی هستم.',
-        createdAt: new Date(Date.now() - 12 * 3600 * 1000).toISOString(),
-        attachments: []
-      }
-    ],
-    history: [
-      { action: 'CREATED', actorId: 'u4', timestamp: new Date(Date.now() - 48 * 3600 * 1000).toISOString() }
-    ]
-  },
-  {
-    id: 'TCK-104',
-    title: 'رفع مشکل محاسبه مالیات در خروجی فاکتورهای اکسل',
-    description: 'در گزارش فصلی مالیات، ردیف‌های مربوط به تخفیف کالا دو بار در جمع نهایی کسر می‌گردد.',
-    creatorId: 'u2',
-    assigneeId: 'u3',
-    taggedUserIds: ['u1'],
-    priority: 'high',
-    status: 'resolved',
-    department: 'توسعه نرم‌افزار',
-    deadline: new Date(Date.now() - 24 * 3600 * 1000).toISOString(),
-    createdAt: new Date(Date.now() - 72 * 3600 * 1000).toISOString(),
-    updatedAt: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
-    attachments: [],
-    replies: [
-      {
-        id: 'rep-4',
-        authorId: 'u3',
-        content: 'فرمول ماکرو در نسخه جدید اصلاح شد و تست موفقیت‌آمیز بود.',
-        createdAt: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
-        attachments: []
-      }
-    ],
-    history: [
-      { action: 'CREATED', actorId: 'u2', timestamp: new Date(Date.now() - 72 * 3600 * 1000).toISOString() },
-      { action: 'STATUS_CHANGE', from: 'in_progress', to: 'resolved', actorId: 'u3', timestamp: new Date(Date.now() - 2 * 3600 * 1000).toISOString() }
-    ]
-  }
-];
+export const INITIAL_TICKETS = [];
 
 class StateManager {
   constructor() {
@@ -285,8 +121,8 @@ class StateManager {
     }
 
     // 2. Select initial logged-in user
-    const savedUserId = localStorage.getItem('current_user_id') || 'u1';
-    this.currentUser = this.users.find(u => u.id === savedUserId) || this.users[0];
+    const savedUserId = localStorage.getItem('current_user_id');
+    this.currentUser = (savedUserId && this.users.find(u => u.id === savedUserId)) || this.users[0] || INITIAL_USERS[0];
 
     // 3. Compute initial notifications for current user
     this.rebuildNotifications();
@@ -439,18 +275,20 @@ class StateManager {
     let matchedUser = this.users.find(u => u.email?.toLowerCase().trim() === email);
 
     if (!matchedUser) {
-      // If there is already an admin in the company database, new Google users become members
-      const hasExistingAdmin = this.users.some(u => u.roleId === 'admin' && !['u1', 'u2', 'u3', 'u4', 'u5', 'u6'].includes(u.id));
-      const initials = (gUser.name || 'کاربر گوگل').split(' ').map(p => p[0]).join('‌');
+      // Check if an admin with a valid email already exists
+      const hasRealAdmin = this.users.some(u => u.roleId === 'admin' && u.email && u.id !== 'admin_initial');
+      const initials = (gUser.name || 'کاربر').split(' ').map(p => p[0]).join('‌');
       matchedUser = {
         id: 'u_g_' + (gUser.sub || Date.now()),
         name: gUser.name || email.split('@')[0],
         email: email,
-        roleId: hasExistingAdmin ? 'member' : 'admin',
-        department: hasExistingAdmin ? 'پرسنل' : 'مدیریت و فناوری',
-        avatar: gUser.picture || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120',
+        roleId: hasRealAdmin ? 'member' : 'admin',
+        department: hasRealAdmin ? 'پرسنل' : 'مدیریت و راهبری',
+        avatar: gUser.picture || './icons/company_logo.png',
         initials: initials || 'گ‌ک'
       };
+      // Remove placeholder admin_initial if present
+      this.users = this.users.filter(u => u.id !== 'admin_initial');
       this.users.unshift(matchedUser);
       this.persistLocal();
       if (this.storageMode === 'gdrive' && this.gdriveProvider.isConnected()) {
@@ -469,7 +307,7 @@ class StateManager {
     this.emit('state_updated');
   }
 
-  // Clear all tickets (wiping demo/mock tickets to start fresh)
+  // Clear all tickets (wiping tickets to start fresh)
   async clearAllTickets() {
     this.tickets = [];
     this.notifications = [];
@@ -479,8 +317,29 @@ class StateManager {
     this.emit('state_updated');
   }
 
+  // Factory Reset: Completely wipes local storage, sessions, service worker caches, and reloads
+  async factoryReset() {
+    try {
+      this.gdriveProvider.signOut();
+    } catch (e) {
+      console.warn('Sign-out on reset:', e);
+    }
+    localStorage.clear();
+    sessionStorage.clear();
+    if ('caches' in window) {
+      try {
+        const keys = await caches.keys();
+        await Promise.all(keys.map(k => caches.delete(k)));
+      } catch (e) {
+        console.warn('Cache purge on reset:', e);
+      }
+    }
+    window.location.href = window.location.origin + window.location.pathname;
+  }
+
   getCurrentUserRole() {
-    return this.roles.find(r => r.id === this.currentUser.roleId) || this.roles[0];
+    if (!this.currentUser) return this.roles[0] || DEFAULT_ROLES[0];
+    return this.roles.find(r => r.id === this.currentUser.roleId) || this.roles[0] || DEFAULT_ROLES[0];
   }
 
   hasPermission(permission) {
@@ -702,6 +561,7 @@ class StateManager {
   // Notifications
   rebuildNotifications() {
     this.notifications = [];
+    if (!this.currentUser) return;
     const now = new Date();
 
     this.tickets.forEach(ticket => {
