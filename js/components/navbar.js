@@ -44,14 +44,14 @@ export class NavbarComponent {
                 </div>
               </div>
 
-              <!-- Main Navigation Tabs (Always Visible in Header) -->
-              <nav class="flex items-center gap-0.5 sm:gap-1 bg-slate-100 dark:bg-slate-800 p-0.5 sm:p-1 rounded-xl">
-                <button id="tab-tickets" class="px-2.5 sm:px-4 py-1 sm:py-1.5 text-[11px] sm:text-xs font-bold rounded-lg transition-all flex items-center gap-1 ${state.currentView === 'tickets' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}">
-                  ${renderIcon('ticket', 'w-3.5 h-3.5 sm:w-4 sm:h-4')}
+              <!-- Desktop Navigation Tabs (Hidden on mobile; mobile uses thumb-friendly bottom nav) -->
+              <nav class="hidden md:flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+                <button id="tab-tickets" class="px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${state.currentView === 'tickets' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}">
+                  ${renderIcon('ticket', 'w-4 h-4')}
                   <span>تیکت‌ها</span>
                 </button>
-                <button id="tab-admin" class="px-2.5 sm:px-4 py-1 sm:py-1.5 text-[11px] sm:text-xs font-bold rounded-lg transition-all flex items-center gap-1 ${state.currentView === 'admin' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}">
-                  ${renderIcon('shield', 'w-3.5 h-3.5 sm:w-4 sm:h-4')}
+                <button id="tab-admin" class="px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${state.currentView === 'admin' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}">
+                  ${renderIcon('shield', 'w-4 h-4')}
                   <span>مدیریت</span>
                 </button>
               </nav>
@@ -67,13 +67,13 @@ export class NavbarComponent {
                 <span class="w-2 h-2 rounded-full ${isDrive ? 'bg-emerald-500 animate-ping' : 'bg-amber-400'}"></span>
               </button>
 
-              <!-- Sound Toggle -->
-              <button id="btn-toggle-sound" class="p-1.5 sm:p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition" title="${soundEnabled ? 'صدای اعلان فعال است' : 'صدا قطع است'}">
+              <!-- Sound Toggle (Desktop/Tablet) -->
+              <button id="btn-toggle-sound" class="hidden sm:flex p-1.5 sm:p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition" title="${soundEnabled ? 'صدای اعلان فعال است' : 'صدا قطع است'}">
                 ${soundEnabled ? renderIcon('volume2', 'w-4 h-4 sm:w-5 sm:h-5') : renderIcon('volumeX', 'w-4 h-4 sm:w-5 sm:h-5 text-rose-500')}
               </button>
 
-              <!-- Dark Mode Toggle -->
-              <button id="btn-toggle-dark" class="p-1.5 sm:p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition" title="حالت شب/روز">
+              <!-- Dark Mode Toggle (Desktop/Tablet) -->
+              <button id="btn-toggle-dark" class="hidden sm:flex p-1.5 sm:p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition" title="حالت شب/روز">
                 ${isDark ? renderIcon('sun', 'w-4 h-4 sm:w-5 sm:h-5 text-amber-400') : renderIcon('moon', 'w-4 h-4 sm:w-5 sm:h-5')}
               </button>
 
@@ -186,6 +186,17 @@ export class NavbarComponent {
                     </div>
                   </div>
 
+                  <div class="sm:hidden p-2 border-b border-slate-100 dark:border-slate-700/60 flex items-center justify-around gap-2 bg-slate-50/50 dark:bg-slate-800/40 text-xs">
+                    <button id="btn-mobile-sound" class="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 font-medium">
+                      ${soundEnabled ? renderIcon('volume2', 'w-4 h-4 text-blue-600') : renderIcon('volumeX', 'w-4 h-4 text-rose-500')}
+                      <span>${soundEnabled ? 'صدا روشن' : 'صدا قطع'}</span>
+                    </button>
+                    <button id="btn-mobile-dark" class="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 font-medium">
+                      ${isDark ? renderIcon('sun', 'w-4 h-4 text-amber-400') : renderIcon('moon', 'w-4 h-4 text-slate-400')}
+                      <span>${isDark ? 'روز' : 'شب'}</span>
+                    </button>
+                  </div>
+
                   <div class="p-2 space-y-1">
                     <button id="btn-dropdown-admin" class="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition">
                       ${renderIcon('shield', 'w-4 h-4 text-blue-600 dark:text-blue-400')}
@@ -270,19 +281,23 @@ export class NavbarComponent {
       state.emit('open_settings_modal');
     });
 
-    // Sound Toggle
-    document.getElementById('btn-toggle-sound')?.addEventListener('click', () => {
+    // Sound Toggle (Desktop & Mobile)
+    const toggleSound = () => {
       sound.toggle(!sound.enabled);
       if (sound.enabled) sound.playNotification();
       this.render();
-    });
+    };
+    document.getElementById('btn-toggle-sound')?.addEventListener('click', toggleSound);
+    document.getElementById('btn-mobile-sound')?.addEventListener('click', toggleSound);
 
-    // Dark Mode Toggle
-    document.getElementById('btn-toggle-dark')?.addEventListener('click', () => {
+    // Dark Mode Toggle (Desktop & Mobile)
+    const toggleDarkMode = () => {
       document.documentElement.classList.toggle('dark');
       localStorage.setItem('theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
       this.render();
-    });
+    };
+    document.getElementById('btn-toggle-dark')?.addEventListener('click', toggleDarkMode);
+    document.getElementById('btn-mobile-dark')?.addEventListener('click', toggleDarkMode);
 
     // Notifications Dropdown Toggle
     document.getElementById('btn-notifications')?.addEventListener('click', (e) => {

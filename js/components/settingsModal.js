@@ -335,7 +335,22 @@ export class SettingsModalComponent {
           type: 'success'
         });
 
-        await state.persistCurrentData();
+        // Always attempt to load existing database first
+        const remoteData = await state.gdriveProvider.load();
+        if (remoteData && remoteData.tickets) {
+          state.handleRemoteData(remoteData, 'gdrive');
+          state.syncGoogleUserWithCurrent();
+          notificationEngine.triggerToast({
+            title: 'همگام‌سازی سازمانی انجام شد',
+            message: 'تیکت‌ها و پرسنل از پایگاه داده مشترک بارگذاری شدند.',
+            type: 'success'
+          });
+        } else {
+          // If no remote database existed yet, save current data & share it
+          await state.persistCurrentData();
+          await state.gdriveProvider.makeFileShared();
+        }
+
         this.render();
       } catch (err) {
         console.error('Google Sign-In Error:', err);

@@ -58,7 +58,7 @@ export class GoogleDriveProvider {
       try {
         this.tokenClient = window.google.accounts.oauth2.initTokenClient({
           client_id: this.clientId,
-          scope: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
+          scope: 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
           callback: async (tokenResponse) => {
             if (tokenResponse.error) {
               console.warn('Google Auth callback error:', tokenResponse.error);
@@ -351,7 +351,7 @@ export class GoogleDriveProvider {
     if (!this.isConnected()) return null;
     try {
       const fileId = await this.getOrCreateDataFile();
-      const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+      const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`, {
         headers: { Authorization: `Bearer ${this.accessToken}` }
       });
       if (res.ok) {
@@ -360,6 +360,9 @@ export class GoogleDriveProvider {
         return JSON.parse(text);
       } else if (res.status === 401) {
         await this.refreshTokenSilently();
+      } else {
+        const errText = await res.text();
+        console.warn('Google Drive load failed:', res.status, errText);
       }
       return null;
     } catch (e) {
@@ -375,7 +378,7 @@ export class GoogleDriveProvider {
       const fileId = await this.getOrCreateDataFile();
       const jsonContent = JSON.stringify(data, null, 2);
 
-      const res = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, {
+      const res = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media&supportsAllDrives=true`, {
         method: 'PATCH',
         headers: {
           Authorization: `Bearer ${this.accessToken}`,

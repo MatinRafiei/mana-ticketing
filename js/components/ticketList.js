@@ -116,6 +116,27 @@ export class TicketListComponent {
           </div>
         ` : ''}
 
+        <!-- Connect Google Drive Prompt Banner (When file ID is set or storage mode is gdrive but not signed in) -->
+        ${!state.gdriveProvider.isConnected() && (state.storageMode === 'gdrive' || state.gdriveProvider.fileId) ? `
+          <div class="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl p-3.5 sm:p-4 flex items-center justify-between flex-wrap gap-3 shadow-lg shadow-blue-500/25 text-white">
+            <div class="flex items-center gap-2.5">
+              <span class="w-8 h-8 rounded-xl bg-white/20 text-white flex items-center justify-center shrink-0">
+                ${renderIcon('drive', 'w-5 h-5')}
+              </span>
+              <div>
+                <h4 class="font-bold text-xs sm:text-sm text-white">اتصال به پایگاه داده ابری سازمان</h4>
+                <p class="text-[11px] text-blue-100">برای دریافت و همگام‌سازی تیکت‌های مشترک، با حساب گوگل وارد شوید.</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2 mr-auto sm:mr-0">
+              <button id="btn-banner-login-google" class="px-4 py-2 rounded-xl bg-white text-blue-700 hover:bg-blue-50 text-xs font-extrabold transition flex items-center gap-1.5 shadow-md">
+                ${renderIcon('drive', 'w-4 h-4 text-blue-600')}
+                <span>ورود با گوگل و همگام‌سازی</span>
+              </button>
+            </div>
+          </div>
+        ` : ''}
+
         <!-- Header / Filters Card -->
         <div class="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 shadow-sm">
 
@@ -377,6 +398,35 @@ export class TicketListComponent {
       }).catch(() => {
         prompt('لینک زیر را کپی کنید:', inviteLink);
       });
+    });
+
+    document.getElementById('btn-banner-login-google')?.addEventListener('click', async () => {
+      const btn = document.getElementById('btn-banner-login-google');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = 'در حال ارتباط با گوگل...';
+      }
+      try {
+        await state.gdriveProvider.signIn();
+        state.storageMode = 'gdrive';
+        localStorage.setItem('storage_mode', 'gdrive');
+
+        const remote = await state.gdriveProvider.load();
+        if (remote && remote.tickets) {
+          state.handleRemoteData(remote, 'gdrive');
+          state.syncGoogleUserWithCurrent();
+          notificationEngine.triggerToast({
+            title: 'همگام‌سازی موفق',
+            message: 'اطلاعات مشترک سازمان دریافت گردید.',
+            type: 'success'
+          });
+        }
+        this.render();
+      } catch (e) {
+        alert('خطا در ورود به گوگل: ' + e.message);
+      } finally {
+        if (btn) btn.disabled = false;
+      }
     });
   }
 }
