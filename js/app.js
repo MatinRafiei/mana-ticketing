@@ -1,0 +1,151 @@
+// Main Application Entry Point & Orchestrator
+
+import { state } from './state.js';
+import { notificationEngine } from './notifications.js';
+import { NavbarComponent } from './components/navbar.js';
+import { TicketListComponent } from './components/ticketList.js';
+import { AdminTabComponent } from './components/adminTab.js';
+import { TicketModalComponent } from './components/ticketModal.js';
+import { TicketDetailComponent } from './components/ticketDetail.js';
+import { SettingsModalComponent } from './components/settingsModal.js';
+
+class App {
+  constructor() {
+    this.navbar = null;
+    this.ticketList = null;
+    this.adminTab = null;
+    this.ticketModal = null;
+    this.ticketDetail = null;
+    this.settingsModal = null;
+  }
+
+  async init() {
+    // 1. Initialize Theme
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+
+    // 2. Initialize Notifications Engine
+    notificationEngine.init();
+
+    // 3. Register Service Worker for PWA
+    this.registerServiceWorker();
+
+    // 4. Instantiate Components
+    this.navbar = new NavbarComponent('navbar-container');
+    this.ticketList = new TicketListComponent('ticket-list-container');
+    this.adminTab = new AdminTabComponent('admin-tab-container');
+    this.ticketModal = new TicketModalComponent('ticket-modal-container');
+    this.ticketDetail = new TicketDetailComponent('ticket-detail-container');
+    this.settingsModal = new SettingsModalComponent('settings-modal-container');
+
+    // 5. Initial Render
+    this.navbar.render();
+    this.renderCurrentView();
+
+    // 6. Subscribe to State Events
+    state.subscribe((eventType, payload) => {
+      this.handleStateEvent(eventType, payload);
+    });
+
+    // 7. Check URL for ticket query param (e.g. ?ticket=TCK-101)
+    const urlParams = new URLSearchParams(window.location.search);
+    const initialTicketId = urlParams.get('ticket');
+    if (initialTicketId) {
+      setTimeout(() => {
+        this.ticketDetail.open(initialTicketId);
+      }, 300);
+    }
+
+    // 8. Auto-connect Google Drive if credentials exist and mode is gdrive
+    if (state.storageMode === 'gdrive' && state.gdriveProvider.isConfigured()) {
+      try {
+        await state.gdriveProvider.initGis();
+      } catch (err) {
+        console.warn('Auto GIS init notice:', err);
+      }
+    }
+
+    console.log('Mana In-Company Ticketing System Ready.');
+  }
+
+  handleStateEvent(eventType, payload) {
+    switch (eventType) {
+      case 'state_updated':
+      case 'user_changed':
+        this.navbar.render();
+        this.renderCurrentView();
+        break;
+
+      case 'view_changed':
+        this.navbar.render();
+        this.renderCurrentView();
+        break;
+
+      case 'open_ticket_modal':
+        this.ticketModal.open();
+        break;
+
+      case 'open_ticket_detail':
+        this.ticketDetail.open(payload || state.activeTicketId);
+        break;
+
+      case 'open_settings_modal':
+        this.settingsModal.open();
+        break;
+
+      case 'notifications_updated':
+        this.navbar.render();
+        break;
+
+      case 'gdrive_status_change':
+        this.navbar.render();
+        break;
+    }
+  }
+
+  renderCurrentView() {
+    const listEl = document.getElementById('ticket-list-container');
+    const adminEl = document.getElementById('admin-tab-container');
+
+    if (state.currentView === 'tickets') {
+      if (listEl) listEl.style.display = 'block';
+      if (adminEl) adminEl.style.display = 'none';
+      this.ticketList.render();
+    } else if (state.currentView === 'admin') {
+      if (listEl) listEl.style.display = 'none';
+      if (adminEl) adminEl.style.display = 'block';
+      this.adminTab.render();
+    }
+  }
+
+  registerServiceWorker() {
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then((reg) => {
+            console.log('PWA ServiceWorker registered with scope:', reg.scope);
+            // Listen for messages from SW (e.g. notification clicks)
+            navigator.serviceWorker.addEventListener('message', (event) => {
+              if (event.data?.type === 'OPEN_TICKET' && event.data?.ticketId) {
+                state.activeTicketId = event.data.ticketId;
+                state.emit('open_ticket_detail', event.data.ticketId);
+              }
+            });
+          })
+          .catch((err) => {
+            console.warn('ServiceWorker registration skipped:', err);
+          });
+      });
+    }
+  }
+}
+
+// Bootstrap on DOM ready
+document.addEventListener('DOMContentLoaded', () => {
+  const app = new App();
+  app.init();
+});
