@@ -93,10 +93,16 @@ export class AdminTabComponent {
                 <h3 class="font-bold text-xs sm:text-sm text-slate-900 dark:text-white">جدول و تاریخچه گردش تیکت‌ها</h3>
                 <p class="text-[11px] text-slate-500 dark:text-slate-400">پیشرفت، مهلت‌ها و مسئولین</p>
               </div>
-              <button id="btn-export-data" class="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition flex items-center gap-1">
-                ${renderIcon('download', 'w-3.5 h-3.5 text-slate-500')}
-                <span>خروجی JSON</span>
-              </button>
+              <div class="flex items-center gap-2 flex-wrap">
+                <button id="btn-clear-demo-tickets" class="px-3 py-1.5 rounded-xl border border-rose-300 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-xs font-semibold transition flex items-center gap-1">
+                  ${renderIcon('trash', 'w-3.5 h-3.5')}
+                  <span>پاک‌سازی تیکت‌های دمو</span>
+                </button>
+                <button id="btn-export-data" class="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition flex items-center gap-1">
+                  ${renderIcon('download', 'w-3.5 h-3.5 text-slate-500')}
+                  <span>خروجی JSON</span>
+                </button>
+              </div>
             </div>
 
             <!-- Mobile View: Responsive Cards List -->
@@ -467,6 +473,18 @@ export class AdminTabComponent {
           state.emit('open_ticket_detail', ticketId);
         }
       });
+    });
+
+    document.getElementById('btn-clear-demo-tickets')?.addEventListener('click', async () => {
+      if (confirm('آیا مطمئن هستید که می‌خواهید کلیه تیکت‌های تستی را پاک کنید و سامانه را از صفر آغاز نمایید؟')) {
+        await state.clearAllTickets();
+        notificationEngine.triggerToast({
+          title: 'تیکت‌های دمو پاک شدند',
+          message: 'سامانه اکنون کاملاً تمیز و آماده ثبت تیکت‌های واقعی است.',
+          type: 'success'
+        });
+        this.render();
+      }
     });
 
     document.getElementById('btn-export-data')?.addEventListener('click', () => {

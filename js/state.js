@@ -439,18 +439,19 @@ class StateManager {
     let matchedUser = this.users.find(u => u.email?.toLowerCase().trim() === email);
 
     if (!matchedUser) {
-      // Auto-register Google account in company team directory
+      // First connected Google account automatically becomes the Organization Admin!
+      const isFirstGoogle = !this.users.some(u => u.id.startsWith('u_g_'));
       const initials = (gUser.name || 'کاربر گوگل').split(' ').map(p => p[0]).join('‌');
       matchedUser = {
         id: 'u_g_' + (gUser.sub || Date.now()),
         name: gUser.name || email.split('@')[0],
         email: email,
-        roleId: this.users.length === 0 ? 'admin' : 'staff',
-        department: 'پرسنل گوگل',
+        roleId: isFirstGoogle ? 'admin' : 'staff',
+        department: isFirstGoogle ? 'مدیریت و فناوری' : 'پرسنل گوگل',
         avatar: gUser.picture || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120',
         initials: initials || 'گ‌ک'
       };
-      this.users.push(matchedUser);
+      this.users.unshift(matchedUser);
       this.persistLocal();
     } else {
       if (gUser.picture && matchedUser.avatar !== gUser.picture) {
@@ -462,6 +463,16 @@ class StateManager {
     localStorage.setItem('current_user_id', matchedUser.id);
     this.rebuildNotifications();
     this.emit('user_changed', matchedUser);
+    this.emit('state_updated');
+  }
+
+  // Clear all tickets (wiping demo/mock tickets to start fresh)
+  async clearAllTickets() {
+    this.tickets = [];
+    this.notifications = [];
+    this.unreadCount = 0;
+    this.activeTicketId = null;
+    await this.persistCurrentData();
     this.emit('state_updated');
   }
 
