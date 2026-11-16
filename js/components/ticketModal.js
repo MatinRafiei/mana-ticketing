@@ -352,9 +352,9 @@ export class TicketModalComponent {
           attachments: finalAttachments
         });
 
-        notificationEngine.triggerAlert({
+        notificationEngine.triggerToast({
           ticketId: newTicket.id,
-          type: 'assigned',
+          type: 'success',
           title: `تیکت ${newTicket.id} ثبت شد`,
           message: `برای ${state.getUserName(assigneeId)} ارجاع داده شد.`
         });

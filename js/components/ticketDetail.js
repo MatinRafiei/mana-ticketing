@@ -401,9 +401,9 @@ export class TicketDetailComponent {
 
         await state.addReply(ticket.id, replyText, finalAttachments, statusChange);
 
-        notificationEngine.triggerAlert({
+        notificationEngine.triggerToast({
           ticketId: ticket.id,
-          type: 'reply',
+          type: 'success',
           title: 'پاسخ با موفقیت ثبت شد',
           message: `برای تیکت ${ticket.id}`
         });
