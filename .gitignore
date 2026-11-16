@@ -20,3 +20,11 @@ export*.json
 .cache/
 tmp/
 scratch/
+
+# Dependencies
+node_modules/
+
+# Runtime data & dynamic uploads
+data/*.json
+uploads/*
+!uploads/.gitkeep

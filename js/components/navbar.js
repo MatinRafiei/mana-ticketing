@@ -20,13 +20,13 @@ export class NavbarComponent {
       name: 'کاربر سیستم',
       email: '',
       avatar: './icons/company_logo.png',
-      roleId: 'admin'
+      roleId: 'member'
     };
-    const role = state.getCurrentUserRole() || { name: 'مدیر ارشد' };
+    const role = state.getCurrentUserRole() || { name: 'کاربر سیستم' };
     const unread = state.unreadCount;
     const isDark = document.documentElement.classList.contains('dark');
     const soundEnabled = sound.enabled;
-    const isDrive = state.storageMode === 'gdrive' && state.gdriveProvider.isConnected();
+    const isConnected = state.serverConnected;
 
     this.container.innerHTML = `
       <!-- Top Header Bar -->
@@ -62,15 +62,14 @@ export class NavbarComponent {
               </nav>
             </div>
 
-            <!-- Left: Actions, Google Drive Status, Notifications & User -->
+            <!-- Left: Actions, Server Status, Notifications & User -->
             <div class="flex items-center gap-1 sm:gap-2 shrink-0">
 
-              <!-- Google Drive Sync Pill (Icon only on mobile, text on desktop) -->
-              <button id="btn-gdrive-status" class="flex items-center gap-1 sm:gap-1.5 p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl text-xs font-medium border transition-all ${isDrive ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300' : 'bg-slate-50 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-blue-400'}" title="تنظیمات ذخیره‌سازی و گوگل درایو">
-                ${isDrive ? renderIcon('cloud', 'w-4 h-4 text-emerald-600') : renderIcon('drive', 'w-4 h-4')}
-                <span class="hidden lg:inline text-[11px]">${isDrive ? 'گوگل درایو' : 'تنظیم درایو'}</span>
-                <span class="w-2 h-2 rounded-full ${isDrive ? 'bg-emerald-500 animate-ping' : 'bg-amber-400'}"></span>
-              </button>
+              <!-- Server Connection Status Pill -->
+              <div class="flex items-center gap-1.5 px-2.5 py-1 sm:py-1.5 rounded-xl text-xs font-medium border transition-all ${isConnected ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300' : 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300'}" title="${isConnected ? 'متصل به سرور لینوکس' : 'در حال تلاش برای اتصال به سرور...'}">
+                <span class="w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500 animate-ping'}"></span>
+                <span class="hidden sm:inline text-[11px]">${isConnected ? 'سرور متصل' : 'قطع ارتباط'}</span>
+              </div>
 
               <!-- Sound Toggle (Desktop/Tablet) -->
               <button id="btn-toggle-sound" class="hidden sm:flex p-1.5 sm:p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition" title="${soundEnabled ? 'صدای اعلان فعال است' : 'صدا قطع است'}">
@@ -146,10 +145,10 @@ export class NavbarComponent {
                 </div>
               </div>
 
-              <!-- Active User Profile & Switcher -->
+              <!-- Active User Profile & Menu -->
               <div class="relative">
                 <button id="btn-user-menu" class="flex items-center gap-1.5 p-1 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition">
-                  <img src="${u.avatar}" alt="${u.name}" class="w-7 h-7 sm:w-8 sm:h-8 rounded-full object-cover ring-2 ring-blue-500/30" />
+                  <img src="${u.avatar || './icons/company_logo.png'}" alt="${u.name}" class="w-7 h-7 sm:w-8 sm:h-8 rounded-full object-cover ring-2 ring-blue-500/30" />
                   <div class="text-right hidden sm:block">
                     <div class="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1">
                       ${u.name}
@@ -159,39 +158,45 @@ export class NavbarComponent {
                   </div>
                 </button>
 
-                <!-- User Switcher Dropdown (Responsive) -->
+                <!-- User Profile & Action Dropdown -->
                 <div id="dropdown-user" class="${this.isUserMenuOpen ? 'block' : 'hidden'} fixed sm:absolute inset-x-2 sm:inset-x-auto sm:left-0 top-16 sm:top-auto sm:mt-2 sm:w-72 max-w-none sm:max-w-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
                   <div class="p-3 bg-slate-50/60 dark:bg-slate-800/80 border-b border-slate-100 dark:border-slate-700/60">
-                    <p class="text-[10px] font-semibold text-slate-400 dark:text-slate-500 mb-1">کاربر فعال کنونی:</p>
+                    <p class="text-[10px] font-semibold text-slate-400 dark:text-slate-500 mb-1">حساب کاربری فعال:</p>
                     <div class="flex items-center gap-2.5">
-                      <img src="${u.avatar}" class="w-8 h-8 rounded-full object-cover" />
-                      <div class="min-w-0">
+                      <img src="${u.avatar || './icons/company_logo.png'}" class="w-9 h-9 rounded-full object-cover" />
+                      <div class="min-w-0 flex-1">
                         <div class="font-bold text-xs text-slate-900 dark:text-white truncate">${u.name}</div>
                         <div class="text-[10px] text-slate-500 dark:text-slate-400 truncate">${u.email}</div>
                       </div>
                     </div>
-                    <div class="mt-1.5 text-[10px] px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 font-medium inline-block">
-                      ${role.name}
+                    <div class="mt-2 flex items-center justify-between">
+                      <span class="text-[10px] px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 font-medium">
+                        ${role.name}
+                      </span>
+                      <span class="text-[10px] text-slate-400">${u.department || 'عمومی'}</span>
                     </div>
                   </div>
 
-                  <div class="p-2 border-b border-slate-100 dark:border-slate-700/60 max-h-56 overflow-y-auto">
-                    <p class="text-[10px] font-bold text-slate-500 dark:text-slate-400 px-2 py-1">تغییر سریع کاربر برای تست اعلان:</p>
-                    <div class="space-y-0.5">
-                      ${state.users.map(user => `
-                        <button class="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-right text-xs hover:bg-slate-100 dark:hover:bg-slate-700/50 switch-user-btn ${user.id === u.id ? 'bg-blue-50 dark:bg-blue-950/40 font-bold text-blue-600 dark:text-blue-400' : 'text-slate-700 dark:text-slate-300'}" data-user-id="${user.id}">
-                          <img src="${user.avatar}" class="w-6 h-6 rounded-full object-cover shrink-0" />
-                          <div class="flex-1 truncate">
-                            <span>${user.name}</span>
-                            <span class="text-[10px] text-slate-400 block">${user.department}</span>
-                          </div>
-                          ${user.id === u.id ? renderIcon('check', 'w-4 h-4 text-blue-600 shrink-0') : ''}
-                        </button>
-                      `).join('')}
-                    </div>
+                  <!-- Profile & Actions -->
+                  <div class="p-2 space-y-1">
+                    <button id="btn-open-profile-menu" class="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/50 transition">
+                      ${renderIcon('user', 'w-4 h-4 text-blue-600 dark:text-blue-400')}
+                      <span>پروفایل و مشخصات من</span>
+                    </button>
+
+                    <button id="btn-dropdown-admin" class="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/50 transition">
+                      ${renderIcon('shield', 'w-4 h-4 text-indigo-500')}
+                      <span>مدیریت تیکت‌ها و نقش‌ها</span>
+                    </button>
+
+                    <a href="./superadmin.html" target="_blank" class="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-bold text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40 transition">
+                      ${renderIcon('cpu', 'w-4 h-4 text-amber-500')}
+                      <span>پنل مدیریت ارشد سرور (Superadmin)</span>
+                    </a>
                   </div>
 
-                  <div class="sm:hidden p-2 border-b border-slate-100 dark:border-slate-700/60 flex items-center justify-around gap-2 bg-slate-50/50 dark:bg-slate-800/40 text-xs">
+                  <!-- Mobile Audio/Dark Controls -->
+                  <div class="sm:hidden p-2 border-t border-slate-100 dark:border-slate-700/60 flex items-center justify-around gap-2 bg-slate-50/50 dark:bg-slate-800/40 text-xs">
                     <button id="btn-mobile-sound" class="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 font-medium">
                       ${soundEnabled ? renderIcon('volume2', 'w-4 h-4 text-blue-600') : renderIcon('volumeX', 'w-4 h-4 text-rose-500')}
                       <span>${soundEnabled ? 'صدا روشن' : 'صدا قطع'}</span>
@@ -202,18 +207,11 @@ export class NavbarComponent {
                     </button>
                   </div>
 
-                  <div class="p-2 space-y-1">
-                    <button id="btn-dropdown-admin" class="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition">
-                      ${renderIcon('shield', 'w-4 h-4 text-blue-600 dark:text-blue-400')}
-                      پنل مدیریت و نقش‌ها
-                    </button>
-                    <button id="btn-open-settings" class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50 transition">
-                      ${renderIcon('settings', 'w-4 h-4 text-slate-400')}
-                      تنظیمات گوگل درایو
-                    </button>
-                    <button id="btn-dropdown-factory-reset" class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition">
-                      ${renderIcon('trash', 'w-4 h-4 text-rose-500')}
-                      بازنشانی کامل سامانه (Reset)
+                  <!-- Logout Button -->
+                  <div class="p-2 border-t border-slate-100 dark:border-slate-700/60">
+                    <button id="btn-dropdown-logout" class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition">
+                      ${renderIcon('logOut', 'w-4 h-4 text-rose-500')}
+                      <span>خروج از حساب کاربری</span>
                     </button>
                   </div>
                 </div>
@@ -229,7 +227,7 @@ export class NavbarComponent {
         </div>
       </header>
 
-      <!-- Mobile Fixed Bottom Navigation Bar (App-like thumb-friendly navigation) -->
+      <!-- Mobile Fixed Bottom Navigation Bar -->
       <nav class="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-lg border-t border-slate-200 dark:border-slate-800 px-3 py-1.5 flex items-center justify-around shadow-2xl pb-safe">
         <!-- Tickets Tab -->
         <button id="bottom-tab-tickets" class="flex flex-col items-center justify-center py-1 px-3 text-[11px] font-bold rounded-xl transition ${state.currentView === 'tickets' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400'}">
@@ -246,6 +244,12 @@ export class NavbarComponent {
         <button id="bottom-tab-admin" class="flex flex-col items-center justify-center py-1 px-3 text-[11px] font-bold rounded-xl transition ${state.currentView === 'admin' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400'}">
           ${renderIcon('shield', 'w-5 h-5 mb-0.5')}
           <span>مدیریت</span>
+        </button>
+
+        <!-- Profile Tab -->
+        <button id="bottom-tab-profile" class="flex flex-col items-center justify-center py-1 px-3 text-[11px] font-bold rounded-xl transition text-slate-500 dark:text-slate-400">
+          ${renderIcon('user', 'w-5 h-5 mb-0.5')}
+          <span>پروفایل</span>
         </button>
       </nav>
     `;
@@ -276,6 +280,22 @@ export class NavbarComponent {
       setView('admin');
     });
 
+    // Profile Modals
+    const openProfile = () => {
+      this.isUserMenuOpen = false;
+      state.emit('open_profile_modal');
+    };
+    document.getElementById('btn-open-profile-menu')?.addEventListener('click', openProfile);
+    document.getElementById('bottom-tab-profile')?.addEventListener('click', openProfile);
+
+    // Logout
+    document.getElementById('btn-dropdown-logout')?.addEventListener('click', () => {
+      this.isUserMenuOpen = false;
+      if (confirm('آیا مایل به خروج از حساب کاربری هستید؟')) {
+        state.logout();
+      }
+    });
+
     // New Ticket Buttons (Desktop + Mobile Center FAB)
     const openNewTicket = () => {
       state.isTicketModalOpen = true;
@@ -283,12 +303,6 @@ export class NavbarComponent {
     };
     document.getElementById('btn-new-ticket')?.addEventListener('click', openNewTicket);
     document.getElementById('bottom-btn-new-ticket')?.addEventListener('click', openNewTicket);
-
-    // Google Drive Status Button -> Open Settings
-    document.getElementById('btn-gdrive-status')?.addEventListener('click', () => {
-      state.isSettingsModalOpen = true;
-      state.emit('open_settings_modal');
-    });
 
     // Sound Toggle (Desktop & Mobile)
     const toggleSound = () => {
@@ -345,41 +359,12 @@ export class NavbarComponent {
       });
     });
 
-    // User Switcher Menu Toggle
+    // User Menu Toggle
     document.getElementById('btn-user-menu')?.addEventListener('click', (e) => {
       e.stopPropagation();
       this.isUserMenuOpen = !this.isUserMenuOpen;
       this.isNotifOpen = false;
       this.render();
-    });
-
-    // Switch User buttons
-    this.container.querySelectorAll('.switch-user-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const targetUserId = btn.getAttribute('data-user-id');
-        state.setCurrentUser(targetUserId);
-        this.isUserMenuOpen = false;
-        notificationEngine.triggerToast({
-          title: `ورود با هویت ${state.currentUser.name}`,
-          message: `نقش: ${state.getCurrentUserRole().name}`,
-          type: 'info'
-        });
-      });
-    });
-
-    // Settings Modal
-    document.getElementById('btn-open-settings')?.addEventListener('click', () => {
-      this.isUserMenuOpen = false;
-      state.isSettingsModalOpen = true;
-      state.emit('open_settings_modal');
-    });
-
-    // Factory Reset from Dropdown
-    document.getElementById('btn-dropdown-factory-reset')?.addEventListener('click', async () => {
-      this.isUserMenuOpen = false;
-      if (confirm('آیا مطمئن هستید که می‌خواهید سامانه را به صورت کامل ریست کنید؟ کلیه داده‌ها، لاگین و تنظیمات مرورگر پاک شده و به نقطه صفر بازمی‌گردد.')) {
-        await state.factoryReset();
-      }
     });
 
     // Close menus on outside click

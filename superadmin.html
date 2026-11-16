@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl" class="h-full bg-slate-900 text-slate-100">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>پنل مدیریت ارشد سرور | سامانه مانا</title>
+  <link rel="icon" type="image/png" href="./icons/company_logo.png" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['IRAN Rounded', 'Iran Rounded', 'IRANYekan', 'Vazirmatn', 'sans-serif'],
+            mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace']
+          }
+        }
+      }
+    };
+  </script>
+  <link rel="stylesheet" href="./css/styles.css?v=2.5" />
+</head>
+<body class="h-full font-sans antialiased bg-slate-950 text-slate-100 flex flex-col">
+
+  <!-- =================================================================== -->
+  <!-- 1. LOGIN OVERLAY (Visible if not authenticated as Superadmin)        -->
+  <!-- =================================================================== -->
+  <div id="login-container" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-6">
+      <div class="text-center space-y-2">
+        <div class="w-16 h-16 rounded-2xl bg-slate-800 p-2 mx-auto border border-slate-700 shadow-md">
+          <img src="./icons/company_logo.png" alt="لوگو" class="w-full h-full object-contain" />
+        </div>
+        <h1 class="text-xl font-black text-white">ورود به پنل مدیریت ارشد سرور</h1>
+        <p class="text-xs text-slate-400">کنترل سطح دسترسی، لاگ‌های امنیتی و کاربران</p>
+      </div>
+
+      <div id="login-error-alert" class="hidden p-3 rounded-xl bg-rose-950/50 border border-rose-800 text-rose-300 text-xs"></div>
+
+      <form id="superadmin-login-form" class="space-y-4">
+        <div>
+          <label class="block text-xs font-bold text-slate-300 mb-1.5">نام کاربری ارشد</label>
+          <input type="text" id="login-username" required value="superadmin" class="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white focus:ring-2 focus:ring-blue-500 font-mono" />
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-300 mb-1.5">رمز عبور ارشد</label>
+          <input type="password" id="login-password" required placeholder="••••••••" class="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white focus:ring-2 focus:ring-blue-500 font-mono" />
+          <span class="text-[10px] text-slate-500 mt-1 block">رمز پیش‌فرض اولیه: admin123456</span>
+        </div>
+
+        <button type="submit" id="btn-login-submit" class="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-bold transition shadow-lg shadow-blue-500/20">
+          ورود امن به پنل سرور
+        </button>
+      </form>
+
+      <div class="text-center pt-2 border-t border-slate-800/80">
+        <a href="./" class="text-xs text-blue-400 hover:underline">بازگشت به برنامه اصلی تیکتینگ</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- =================================================================== -->
+  <!-- 2. MAIN SUPERADMIN DASHBOARD                                        -->
+  <!-- =================================================================== -->
+  <div id="dashboard-container" class="hidden flex-1 flex flex-col min-h-screen">
+
+    <!-- Top Header -->
+    <header class="bg-slate-900 border-b border-slate-800 sticky top-0 z-30">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-slate-800 p-1 border border-slate-700 shrink-0">
+            <img src="./icons/company_logo.png" alt="لوگو" class="w-full h-full object-contain" />
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h2 class="font-black text-sm sm:text-base text-white">مدیریت ارشد سرور مانا</h2>
+              <span class="px-2 py-0.5 rounded-md bg-rose-950/80 text-rose-400 border border-rose-800 text-[10px] font-bold">Super Admin</span>
+            </div>
+            <p class="text-[11px] text-slate-400">کنترل لینوکس، لاگ‌های ورود و امنیت</p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <a href="./" target="_blank" class="px-3 py-1.5 rounded-xl border border-slate-700 text-slate-300 hover:bg-slate-800 text-xs font-medium transition hidden sm:inline-flex items-center gap-1">
+            مشاهده سامانه تیکتینگ
+          </a>
+          <button id="btn-open-pwd-modal" class="px-3 py-1.5 rounded-xl border border-slate-700 text-slate-300 hover:bg-slate-800 text-xs font-medium transition">
+            تغییر رمز سرور
+          </button>
+          <button id="btn-superadmin-logout" class="px-3 py-1.5 rounded-xl bg-rose-600/20 text-rose-400 hover:bg-rose-600/30 border border-rose-800 text-xs font-bold transition">
+            خروج
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+      <!-- Server Metrics Cards -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+        <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-1">
+          <span class="text-[11px] text-slate-400 block">وضعیت آپتایم سرور</span>
+          <div id="metric-uptime" class="text-sm sm:text-base font-bold text-emerald-400 truncate">در حال بررسی...</div>
+          <span class="text-[10px] text-slate-500 block">بدون قطعی و آنلاین</span>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-1">
+          <span class="text-[11px] text-slate-400 block">حافظه RAM سرور</span>
+          <div id="metric-memory" class="text-sm sm:text-base font-bold text-blue-400">0%</div>
+          <span id="metric-memory-detail" class="text-[10px] text-slate-500 block">0 / 0 MB</span>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-1">
+          <span class="text-[11px] text-slate-400 block">کاربران فعال / مسدود</span>
+          <div id="metric-users" class="text-sm sm:text-base font-bold text-white">0</div>
+          <span id="metric-users-detail" class="text-[10px] text-slate-500 block">0 کاربر مسدود</span>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-1">
+          <span class="text-[11px] text-slate-400 block">دستگاه‌های متصل به پوش</span>
+          <div id="metric-push" class="text-sm sm:text-base font-bold text-amber-400">0</div>
+          <span class="text-[10px] text-slate-500 block">دریافت اعلان با تب بسته</span>
+        </div>
+      </div>
+
+      <!-- Navigation Sub-Tabs -->
+      <div class="flex items-center gap-1.5 bg-slate-900 p-1.5 rounded-2xl border border-slate-800 overflow-x-auto">
+        <button class="nav-tab-btn px-4 py-2 text-xs font-bold rounded-xl transition bg-blue-600 text-white shadow" data-tab="users">
+          پرسنل و حساب‌ها
+        </button>
+        <button class="nav-tab-btn px-4 py-2 text-xs font-bold rounded-xl transition text-slate-400 hover:text-white" data-tab="logs">
+          لاگ‌های ورود و نشست‌ها
+        </button>
+        <button class="nav-tab-btn px-4 py-2 text-xs font-bold rounded-xl transition text-slate-400 hover:text-white" data-tab="roles">
+          نقش‌ها و دسترسی‌ها
+        </button>
+        <button class="nav-tab-btn px-4 py-2 text-xs font-bold rounded-xl transition text-slate-400 hover:text-white" data-tab="system">
+          تنظیمات و ریست کارخانه
+        </button>
+      </div>
+
+      <!-- ================= TAB 1: USERS ================= -->
+      <section id="tab-sec-users" class="space-y-4">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+          <div>
+            <h3 class="font-bold text-sm sm:text-base text-white">مدیریت پرسنل و دسترسی ورود</h3>
+            <p class="text-xs text-slate-400">تعریف ایمیل (Gmail)، کلمه عبور و مسدودسازی آنی کاربران</p>
+          </div>
+          <button id="btn-show-add-user" class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md shadow-blue-500/20 transition flex items-center gap-1.5">
+            + تعریف همکار جدید
+          </button>
+        </div>
+
+        <!-- Add User Box -->
+        <div id="box-add-user" class="hidden bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 space-y-4 animate-in fade-in">
+          <h4 class="font-bold text-sm text-white">افزودن کاربر جدید با ایمیل و رمز عبور</h4>
+          <form id="form-create-user" class="space-y-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              <div>
+                <label class="block text-xs font-bold text-slate-300 mb-1">نام و نام خانوادگی <span class="text-rose-500">*</span></label>
+                <input type="text" id="new-user-name" required placeholder="مثال: رضا صادقی" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white" />
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-300 mb-1">ایمیل یا جیمیل <span class="text-rose-500">*</span></label>
+                <input type="email" id="new-user-email" required placeholder="name@gmail.com" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white font-mono" />
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-300 mb-1">رمز عبور اولیه <span class="text-rose-500">*</span></label>
+                <input type="text" id="new-user-pwd" required value="123456" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white font-mono" />
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-300 mb-1">واحد سازمانی</label>
+                <input type="text" id="new-user-dept" placeholder="مثال: بازرگانی و فروش" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white" />
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-300 mb-1">نقش سازمانی</label>
+                <select id="new-user-role" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white">
+                  <!-- Populated by JS -->
+                </select>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <button type="button" id="btn-cancel-add-user" class="px-4 py-1.5 rounded-xl text-xs text-slate-400 hover:text-white">انصراف</button>
+              <button type="submit" class="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold">ثبت و ایجاد کاربر</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Users Table -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+          <div class="overflow-x-auto">
+            <table class="w-full text-right text-xs">
+              <thead class="bg-slate-800/60 text-slate-400 border-b border-slate-800">
+                <tr>
+                  <th class="py-3 px-4">همکار</th>
+                  <th class="py-3 px-4">ایمیل (شناسه ورود)</th>
+                  <th class="py-3 px-4">واحد</th>
+                  <th class="py-3 px-4">نقش</th>
+                  <th class="py-3 px-4 text-center">وضعیت دسترسی</th>
+                  <th class="py-3 px-4 text-center">عملیات</th>
+                </tr>
+              </thead>
+              <tbody id="users-table-body" class="divide-y divide-slate-800">
+                <!-- Populated by JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= TAB 2: AUDIT LOGS ================= -->
+      <section id="tab-sec-logs" class="hidden space-y-4">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+          <div>
+            <h3 class="font-bold text-sm sm:text-base text-white">لاگ‌های امنیتی ورود به سامانه</h3>
+            <p class="text-xs text-slate-400">ثبت کلیه تلاش‌های ورود، آدرس‌های IP و مسدودسازی‌های امنیتی</p>
+          </div>
+          <button id="btn-refresh-logs" class="px-3.5 py-1.5 rounded-xl border border-slate-700 hover:bg-slate-800 text-xs font-bold text-slate-300 transition">
+            بروزرسانی لاگ‌ها
+          </button>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+          <div class="overflow-x-auto">
+            <table class="w-full text-right text-xs">
+              <thead class="bg-slate-800/60 text-slate-400 border-b border-slate-800">
+                <tr>
+                  <th class="py-3 px-4">زمان</th>
+                  <th class="py-3 px-4">ایمیل / شناسه</th>
+                  <th class="py-3 px-4">آدرس IP</th>
+                  <th class="py-3 px-4">نوع</th>
+                  <th class="py-3 px-4 text-center">نتیجه</th>
+                  <th class="py-3 px-4">مرورگر و دستگاه</th>
+                  <th class="py-3 px-4">پیام</th>
+                </tr>
+              </thead>
+              <tbody id="logs-table-body" class="divide-y divide-slate-800 font-mono">
+                <!-- Populated by JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= TAB 3: ROLES ================= -->
+      <section id="tab-sec-roles" class="hidden space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="font-bold text-sm sm:text-base text-white">نقش‌ها و مجوزهای سازمانی</h3>
+            <p class="text-xs text-slate-400">سطوح دسترسی به تیکت‌ها و ارجاعات</p>
+          </div>
+        </div>
+        <div id="roles-grid" class="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+          <!-- Populated by JS -->
+        </div>
+      </section>
+
+      <!-- ================= TAB 4: SYSTEM & RESET ================= -->
+      <section id="tab-sec-system" class="hidden space-y-6">
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 space-y-4">
+          <h3 class="font-bold text-sm sm:text-base text-white">مشخصات فنی سرور لینوکس</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+            <div class="p-3 bg-slate-800/60 rounded-xl border border-slate-700/60 space-y-1">
+              <span class="text-slate-400 block text-[11px]">سرویس پوش‌نوتیفیکیشن (VAPID):</span>
+              <span class="font-bold text-emerald-400">فعال و آماده ارسال به گوشی‌های خاموش</span>
+            </div>
+            <div class="p-3 bg-slate-800/60 rounded-xl border border-slate-700/60 space-y-1">
+              <span class="text-slate-400 block text-[11px]">پایگاه‌داده اختصاصی:</span>
+              <span class="font-mono text-slate-200">data/ticketing_db.json (محلی و بدون وابستگی)</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Danger Zone -->
+        <div class="bg-rose-950/20 border-2 border-rose-900/60 rounded-3xl p-5 sm:p-6 space-y-3">
+          <div class="flex items-center gap-2 text-rose-400 font-bold text-sm">
+            <span>منطقه حساس و بحرانی (Danger Zone)</span>
+          </div>
+          <p class="text-xs text-rose-300 leading-relaxed">
+            بازنشانی کامل سرویس (Factory Reset) کلیه تیکت‌ها، لاگ‌ها و توکن‌های ورود را پاک کرده و سامانه را به وضعیت اولیه کارخانه بازمی‌گرداند.
+          </p>
+          <button id="btn-show-factory-reset" class="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition shadow-md shadow-rose-600/30">
+            بازنشانی کارخانه سرور (Factory Reset)
+          </button>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Reset Password Modal for a User -->
+  <div id="modal-reset-user-pwd" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-sm w-full space-y-4">
+      <h4 class="font-bold text-sm text-white">تغییر رمز عبور همکار</h4>
+      <p id="reset-pwd-target-user" class="text-xs text-slate-400"></p>
+      <input type="text" id="reset-pwd-new-val" placeholder="رمز عبور جدید..." class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white font-mono" />
+      <div class="flex items-center justify-end gap-2 pt-2">
+        <button id="btn-cancel-reset-pwd" class="px-3.5 py-1.5 text-xs text-slate-400 hover:text-white">انصراف</button>
+        <button id="btn-submit-reset-pwd" class="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold">ذخیره رمز جدید</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Change Master Superadmin Password Modal -->
+  <div id="modal-change-superadmin-pwd" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-sm w-full space-y-4">
+      <h4 class="font-bold text-sm text-white">تغییر رمز عبور مدیر ارشد سرور</h4>
+      <div class="space-y-2">
+        <input type="password" id="input-curr-superadmin-pwd" placeholder="رمز عبور فعلی..." class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white font-mono" />
+        <input type="password" id="input-new-superadmin-pwd" placeholder="رمز عبور جدید (حداقل ۶ کاراکتر)..." class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white font-mono" />
+      </div>
+      <div class="flex items-center justify-end gap-2 pt-2">
+        <button id="btn-cancel-superadmin-pwd" class="px-3.5 py-1.5 text-xs text-slate-400 hover:text-white">انصراف</button>
+        <button id="btn-submit-superadmin-pwd" class="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold">تغییر رمز</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="./js/superadmin.js"></script>
+</body>
+</html>

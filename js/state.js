@@ -1,13 +1,13 @@
-// Central State Management with Event Bus & Storage Sync
+// Central State Management with Event Bus & Server API Sync
 
 import { LocalStorageProvider } from './storage/local.js';
-import { GoogleDriveProvider } from './storage/gdrive.js';
+import { ServerStorageProvider } from './storage/server.js';
 
 export const DEFAULT_ROLES = [
   {
     id: 'admin',
-    name: 'مدیر ارشد سیستم (Admin)',
-    description: 'دسترسی کامل به تمامی بخش‌ها، گزارشات، تعریف نقش‌ها و مدیریت کاربران',
+    name: 'مدیر سیستم (Admin)',
+    description: 'دسترسی کامل به تمامی بخش‌های تیکتینگ، گزارشات، تعریف نقش‌ها و ارجاعات',
     isSystem: true,
     permissions: [
       'view_all_tickets',
@@ -57,11 +57,11 @@ export const DEFAULT_ROLES = [
 
 export const INITIAL_USERS = [
   {
-    id: 'admin_initial',
-    name: 'مدیر سامانه',
-    email: '',
+    id: 'u_manager_1',
+    name: 'مدیر سامانه تیکتینگ',
+    email: 'manager@company.com',
     roleId: 'admin',
-    department: 'مدیریت و راهبری',
+    department: 'مدیریت و فناوری',
     avatar: './icons/company_logo.png',
     initials: 'م‌س'
   }
@@ -88,29 +88,25 @@ class StateManager {
     this.currentView = 'tickets'; // tickets, admin
     this.activeTicketId = null;
     this.isTicketModalOpen = false;
-    this.isSettingsModalOpen = false;
+    this.isProfileModalOpen = false;
+    this.isLoginModalOpen = false;
 
-    // Storage and Google Drive
-    this.storageMode = localStorage.getItem('storage_mode') || 'local'; // 'local' or 'gdrive'
-    this.gdriveStatus = { status: 'idle', message: 'آماده به کار', lastSync: null };
-
+    // Server Provider & Local Fallback
+    this.serverConnected = false;
     this.localProvider = new LocalStorageProvider((data, sourceId) => this.handleRemoteData(data, sourceId));
-    this.gdriveProvider = new GoogleDriveProvider({
-      onRemoteUpdate: (data) => this.handleRemoteData(data, 'gdrive'),
-      onStatusChange: (status) => {
-        this.gdriveStatus = status;
-        if (status.status === 'connected' && this.gdriveProvider.googleUser) {
-          this.syncGoogleUserWithCurrent();
-        }
-        this.emit('gdrive_status_change', status);
+    this.serverProvider = new ServerStorageProvider(
+      (data, sourceId) => this.handleRemoteData(data, sourceId),
+      (isConnected) => {
+        this.serverConnected = isConnected;
+        this.emit('server_connection_change', isConnected);
       }
-    });
+    );
 
     this.init();
   }
 
-  init() {
-    // 1. Try to load from LocalStorage first
+  async init() {
+    // 1. Try to load cached data from LocalStorage
     const saved = this.localProvider.load();
     if (saved && saved.tickets && saved.users && saved.roles) {
       this.tickets = saved.tickets;
@@ -120,11 +116,33 @@ class StateManager {
       this.persistLocal();
     }
 
-    // 2. Select initial logged-in user
     const savedUserId = localStorage.getItem('current_user_id');
     this.currentUser = (savedUserId && this.users.find(u => u.id === savedUserId)) || this.users[0] || INITIAL_USERS[0];
 
-    // 3. Compute initial notifications for current user
+    // 2. If authenticated with server, fetch latest profile and live data
+    if (this.serverProvider.isLoggedIn()) {
+      try {
+        const profile = await this.serverProvider.getProfile();
+        if (profile) {
+          this.currentUser = profile;
+          localStorage.setItem('current_user_id', profile.id);
+        }
+        const freshData = await this.serverProvider.load();
+        if (freshData) {
+          this.handleRemoteData(freshData, 'server_init');
+        }
+      } catch (err) {
+        console.warn('Initial server sync notice:', err);
+      }
+    } else {
+      // Prompt user to log in if not logged in
+      setTimeout(() => {
+        if (!this.serverProvider.isLoggedIn()) {
+          this.emit('open_login_modal');
+        }
+      }, 300);
+    }
+
     this.rebuildNotifications();
   }
 
@@ -151,23 +169,10 @@ class StateManager {
     }, this.currentUser?.id);
   }
 
-  async persistCurrentData() {
-    this.persistLocal();
-    if (this.storageMode === 'gdrive' && this.gdriveProvider.isConnected()) {
-      await this.gdriveProvider.save({
-        tickets: this.tickets,
-        users: this.users,
-        roles: this.roles,
-        updatedAt: new Date().toISOString()
-      });
-    }
-  }
-
-  // Handle incoming remote updates (from Google Drive polling or cross-tab BroadcastChannel)
+  // Handle incoming remote updates (WebSocket or polling)
   handleRemoteData(incoming, source) {
     if (!incoming || !incoming.tickets) return;
 
-    // Detect new tickets or replies targeting current user
     const previousTicketsMap = new Map(this.tickets.map(t => [t.id, t]));
     const newNotifications = [];
 
@@ -176,7 +181,7 @@ class StateManager {
 
       // Condition 1: Brand new ticket created targeting current user
       if (!oldTicket) {
-        if (newTicket.assigneeId === this.currentUser.id && newTicket.creatorId !== this.currentUser.id) {
+        if (this.currentUser && newTicket.assigneeId === this.currentUser.id && newTicket.creatorId !== this.currentUser.id) {
           newNotifications.push({
             id: 'notif-' + Date.now() + Math.random(),
             ticketId: newTicket.id,
@@ -186,7 +191,7 @@ class StateManager {
             createdAt: new Date().toISOString(),
             read: false
           });
-        } else if (newTicket.taggedUserIds?.includes(this.currentUser.id) && newTicket.creatorId !== this.currentUser.id) {
+        } else if (this.currentUser && newTicket.taggedUserIds?.includes(this.currentUser.id) && newTicket.creatorId !== this.currentUser.id) {
           newNotifications.push({
             id: 'notif-' + Date.now() + Math.random(),
             ticketId: newTicket.id,
@@ -198,13 +203,12 @@ class StateManager {
           });
         }
       } else {
-        // Condition 2: Existing ticket updated
-        // New replies
+        // Condition 2: Existing ticket updated with new replies
         const oldReplyCount = oldTicket.replies?.length || 0;
         const newReplyCount = newTicket.replies?.length || 0;
         if (newReplyCount > oldReplyCount) {
           const latestReply = newTicket.replies[newReplyCount - 1];
-          if (latestReply.authorId !== this.currentUser.id) {
+          if (this.currentUser && latestReply.authorId !== this.currentUser.id) {
             const isRelevant = newTicket.assigneeId === this.currentUser.id ||
               newTicket.creatorId === this.currentUser.id ||
               newTicket.taggedUserIds?.includes(this.currentUser.id);
@@ -225,7 +229,7 @@ class StateManager {
 
         // Status changed
         if (oldTicket.status !== newTicket.status) {
-          const isRelevant = newTicket.assigneeId === this.currentUser.id || newTicket.creatorId === this.currentUser.id;
+          const isRelevant = this.currentUser && (newTicket.assigneeId === this.currentUser.id || newTicket.creatorId === this.currentUser.id);
           if (isRelevant) {
             newNotifications.push({
               id: 'notif-' + Date.now() + Math.random(),
@@ -252,78 +256,38 @@ class StateManager {
       this.emit('instant_notification', newNotifications);
     }
 
+    this.persistLocal();
     this.emit('state_updated');
   }
 
-  // Active User Switcher
-  setCurrentUser(userId) {
-    const user = this.users.find(u => u.id === userId);
-    if (!user) return;
+  // --- Auth Methods ---
+  async loginWithServer(email, password) {
+    const user = await this.serverProvider.login(email, password);
     this.currentUser = user;
     localStorage.setItem('current_user_id', user.id);
+
+    const fresh = await this.serverProvider.load();
+    if (fresh) {
+      this.handleRemoteData(fresh, 'login');
+    }
+
     this.rebuildNotifications();
     this.emit('user_changed', user);
     this.emit('state_updated');
+    return user;
   }
 
-  // Automatically match or register logged-in Google account with internal user directory
-  syncGoogleUserWithCurrent() {
-    const gUser = this.gdriveProvider.googleUser;
-    if (!gUser || !gUser.email) return;
-
-    const email = gUser.email.toLowerCase().trim();
-    let matchedUser = this.users.find(u => u.email?.toLowerCase().trim() === email);
-
-    if (!matchedUser) {
-      // Check if an admin with a valid email already exists
-      const hasRealAdmin = this.users.some(u => u.roleId === 'admin' && u.email && u.id !== 'admin_initial');
-      const initials = (gUser.name || 'کاربر').split(' ').map(p => p[0]).join('‌');
-      matchedUser = {
-        id: 'u_g_' + (gUser.sub || Date.now()),
-        name: gUser.name || email.split('@')[0],
-        email: email,
-        roleId: hasRealAdmin ? 'member' : 'admin',
-        department: hasRealAdmin ? 'پرسنل' : 'مدیریت و راهبری',
-        avatar: gUser.picture || './icons/company_logo.png',
-        initials: initials || 'گ‌ک'
-      };
-      // Remove placeholder admin_initial if present
-      this.users = this.users.filter(u => u.id !== 'admin_initial');
-      this.users.unshift(matchedUser);
-      this.persistLocal();
-      if (this.storageMode === 'gdrive' && this.gdriveProvider.isConnected()) {
-        this.persistCurrentData();
-      }
-    } else {
-      if (gUser.picture && matchedUser.avatar !== gUser.picture) {
-        matchedUser.avatar = gUser.picture;
-      }
-    }
-
-    this.currentUser = matchedUser;
-    localStorage.setItem('current_user_id', matchedUser.id);
-    this.rebuildNotifications();
-    this.emit('user_changed', matchedUser);
-    this.emit('state_updated');
+  logout() {
+    this.serverProvider.logout();
+    this.currentUser = null;
+    localStorage.removeItem('current_user_id');
+    this.emit('user_changed', null);
+    this.emit('open_login_modal');
   }
 
-  // Clear all tickets (wiping tickets to start fresh)
-  async clearAllTickets() {
-    this.tickets = [];
-    this.notifications = [];
-    this.unreadCount = 0;
-    this.activeTicketId = null;
-    await this.persistCurrentData();
-    this.emit('state_updated');
-  }
-
-  // Factory Reset: Completely wipes local storage, sessions, service worker caches, and reloads
+  // Factory Reset
   async factoryReset() {
-    try {
-      this.gdriveProvider.signOut();
-    } catch (e) {
-      console.warn('Sign-out on reset:', e);
-    }
+    this.logout();
     localStorage.clear();
     sessionStorage.clear();
     if ('caches' in window) {
@@ -359,38 +323,46 @@ class StateManager {
     return u ? u.name : 'کاربر نامشخص';
   }
 
-  // Ticket Operations
+  // --- Ticket Operations ---
   async createTicket({ title, description, assigneeId, taggedUserIds, priority, department, deadline, attachments = [] }) {
-    const nextNum = this.tickets.length + 101;
-    const newTicket = {
-      id: `TCK-${nextNum}`,
-      title: title.trim(),
-      description: description.trim(),
-      creatorId: this.currentUser.id,
-      assigneeId: assigneeId,
-      taggedUserIds: taggedUserIds || [],
-      priority: priority || 'normal',
-      status: 'open',
-      department: department || 'عمومی',
-      deadline: deadline || null,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      attachments: attachments,
-      replies: [],
-      history: [
-        {
-          action: 'CREATED',
-          actorId: this.currentUser.id,
-          timestamp: new Date().toISOString()
-        }
-      ]
-    };
+    let newTicket;
+    if (this.serverProvider.isLoggedIn()) {
+      newTicket = await this.serverProvider.createTicket({
+        title,
+        description,
+        assigneeId,
+        taggedUserIds,
+        priority,
+        department,
+        deadline,
+        attachments
+      });
+    } else {
+      const nextNum = this.tickets.length + 101;
+      newTicket = {
+        id: `TCK-${nextNum}`,
+        title: title.trim(),
+        description: description.trim(),
+        creatorId: this.currentUser?.id || 'u_manager_1',
+        assigneeId,
+        taggedUserIds: taggedUserIds || [],
+        priority: priority || 'normal',
+        status: 'open',
+        department: department || 'عمومی',
+        deadline: deadline || null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        attachments: attachments,
+        replies: [],
+        history: [{ action: 'CREATED', actorId: this.currentUser?.id || 'u_manager_1', timestamp: new Date().toISOString() }]
+      };
+    }
 
-    this.tickets.unshift(newTicket);
-    await this.persistCurrentData();
-
-    // Check if creator also assigned it to someone else -> prepare local notification test
-    this.emit('ticket_created', newTicket);
+    const exists = this.tickets.some(t => t.id === newTicket.id);
+    if (!exists) {
+      this.tickets.unshift(newTicket);
+    }
+    this.persistLocal();
     this.emit('state_updated');
     return newTicket;
   }
@@ -399,117 +371,102 @@ class StateManager {
     const ticket = this.tickets.find(t => t.id === ticketId);
     if (!ticket) return;
 
-    const oldStatus = ticket.status;
+    if (this.serverProvider.isLoggedIn()) {
+      await this.serverProvider.updateTicket(ticketId, { status: newStatus });
+    }
+
     ticket.status = newStatus;
     ticket.updatedAt = new Date().toISOString();
     ticket.history.push({
       action: 'STATUS_CHANGE',
-      from: oldStatus,
+      from: ticket.status,
       to: newStatus,
-      actorId: this.currentUser.id,
+      actorId: this.currentUser?.id || 'u_manager_1',
       timestamp: new Date().toISOString()
     });
 
-    await this.persistCurrentData();
+    this.persistLocal();
+    this.rebuildNotifications();
     this.emit('state_updated');
   }
 
-  async addReply(ticketId, content, attachments = [], newStatus = null) {
+  async addReply(ticketId, content, attachments = []) {
     const ticket = this.tickets.find(t => t.id === ticketId);
     if (!ticket) return;
 
-    const reply = {
-      id: `rep-${Date.now()}`,
-      authorId: this.currentUser.id,
-      content: content.trim(),
-      createdAt: new Date().toISOString(),
-      attachments: attachments || []
-    };
-
-    ticket.replies.push(reply);
-    ticket.updatedAt = new Date().toISOString();
-
-    if (newStatus && newStatus !== ticket.status) {
-      ticket.history.push({
-        action: 'STATUS_CHANGE',
-        from: ticket.status,
-        to: newStatus,
-        actorId: this.currentUser.id,
-        timestamp: new Date().toISOString()
-      });
-      ticket.status = newStatus;
+    let reply;
+    if (this.serverProvider.isLoggedIn()) {
+      reply = await this.serverProvider.addReply(ticketId, { content, attachments });
+    } else {
+      reply = {
+        id: `rep-${Date.now()}`,
+        authorId: this.currentUser?.id || 'u_manager_1',
+        content: content.trim(),
+        attachments: attachments,
+        createdAt: new Date().toISOString()
+      };
     }
 
-    ticket.history.push({
-      action: 'REPLY_ADDED',
-      actorId: this.currentUser.id,
-      timestamp: new Date().toISOString()
-    });
+    if (!ticket.replies.some(r => r.id === reply.id)) {
+      ticket.replies.push(reply);
+    }
+    ticket.updatedAt = new Date().toISOString();
 
-    await this.persistCurrentData();
+    this.persistLocal();
     this.emit('state_updated');
     return reply;
   }
 
   async deleteTicket(ticketId) {
-    if (!this.hasPermission('delete_ticket')) {
-      alert('شما دسترسی حذف تیکت را ندارید.');
-      return false;
+    if (this.serverProvider.isLoggedIn()) {
+      await this.serverProvider.deleteTicket(ticketId);
     }
     this.tickets = this.tickets.filter(t => t.id !== ticketId);
-    if (this.activeTicketId === ticketId) {
-      this.activeTicketId = null;
-    }
-    await this.persistCurrentData();
+    this.persistLocal();
     this.emit('state_updated');
-    return true;
   }
 
-  // Role & User Operations
+  async clearAllTickets() {
+    this.tickets = [];
+    this.notifications = [];
+    this.unreadCount = 0;
+    this.activeTicketId = null;
+    this.persistLocal();
+    this.emit('state_updated');
+  }
+
+  // --- Roles & Users Helpers ---
   async createRole({ name, description, permissions }) {
+    const id = 'role_' + Date.now();
     const newRole = {
-      id: 'role_' + Date.now(),
+      id,
       name: name.trim(),
       description: description.trim(),
       isSystem: false,
-      permissions: permissions || []
+      permissions: permissions || ['create_ticket']
     };
     this.roles.push(newRole);
-    await this.persistCurrentData();
+    this.persistLocal();
     this.emit('state_updated');
     return newRole;
   }
 
   async deleteRole(roleId) {
-    if (roleId === 'admin') {
-      throw new Error('نقش مدیر ارشد سیستم غیرقابل حذف است.');
+    const role = this.roles.find(r => r.id === roleId);
+    if (!role) throw new Error('نقش مورد نظر یافت نشد.');
+    if (role.isSystem || role.id === 'admin') {
+      throw new Error('امکان حذف نقش‌های سیستمی پیش‌فرض وجود ندارد.');
     }
-    const roleToDelete = this.roles.find(r => r.id === roleId);
-    if (!roleToDelete) return false;
-
-    // Fallback role for any users that had this role
-    const fallbackRoleId = this.roles.find(r => r.id !== roleId)?.id || 'admin';
     this.users.forEach(u => {
-      if (u.roleId === roleId) {
-        u.roleId = fallbackRoleId;
-      }
+      if (u.roleId === roleId) u.roleId = 'member';
     });
-
     this.roles = this.roles.filter(r => r.id !== roleId);
-    await this.persistCurrentData();
+    this.persistLocal();
     this.emit('state_updated');
     return true;
   }
 
-  async updateUserRole(userId, newRoleId) {
-    const user = this.users.find(u => u.id === userId);
-    if (!user) return;
-    user.roleId = newRoleId;
-    await this.persistCurrentData();
-    this.emit('state_updated');
-  }
-
-  async addUser({ name, email, roleId, department }) {
+  async addUser({ name, email, department, roleId }) {
     const initials = name.split(' ').map(p => p[0]).join('‌');
     const newUser = {
       id: 'u_' + Date.now(),
@@ -517,11 +474,11 @@ class StateManager {
       email: email.trim(),
       roleId: roleId || 'member',
       department: department || 'عمومی',
-      avatar: `https://images.unsplash.com/photo-${1500000000000 + Math.floor(Math.random() * 1000000)}?w=120&auto=format&fit=crop&q=80`,
+      avatar: './icons/company_logo.png',
       initials: initials || 'ک‌ج'
     };
     this.users.push(newUser);
-    await this.persistCurrentData();
+    this.persistLocal();
     this.emit('state_updated');
     return newUser;
   }
@@ -531,41 +488,29 @@ class StateManager {
       throw new Error('حداقل یک کاربر در سامانه باید وجود داشته باشد.');
     }
     this.users = this.users.filter(u => u.id !== userId);
-    // If active user was deleted, switch to the first remaining user
-    if (this.currentUser.id === userId) {
+    if (this.currentUser && this.currentUser.id === userId) {
       this.currentUser = this.users[0];
     }
-    await this.persistCurrentData();
+    this.persistLocal();
     this.emit('state_updated');
     return true;
   }
 
-  async clearDemoUsers() {
-    const googleUser = this.gdrive.getGoogleUser();
-    let keepUser = null;
-    if (googleUser && googleUser.email) {
-      keepUser = this.users.find(u => u.email.toLowerCase() === googleUser.email.toLowerCase());
-    }
-    if (!keepUser) {
-      keepUser = this.currentUser || this.users[0];
-    }
-    // Make sure keepUser has admin role
-    keepUser.roleId = 'admin';
-    this.users = [keepUser];
-    this.currentUser = keepUser;
-    await this.persistCurrentData();
+  async updateUserRole(userId, newRoleId) {
+    const user = this.users.find(u => u.id === userId);
+    if (!user) return;
+    user.roleId = newRoleId;
+    this.persistLocal();
     this.emit('state_updated');
-    return true;
   }
 
-  // Notifications
+  // --- Notifications Helper ---
   rebuildNotifications() {
     this.notifications = [];
     if (!this.currentUser) return;
     const now = new Date();
 
     this.tickets.forEach(ticket => {
-      // Check overdue tickets assigned to current user
       if (ticket.assigneeId === this.currentUser.id && ticket.status !== 'resolved' && ticket.status !== 'closed') {
         if (ticket.deadline && new Date(ticket.deadline) < now) {
           this.notifications.push({
@@ -602,8 +547,8 @@ class StateManager {
   getStatusLabel(status) {
     switch (status) {
       case 'open': return 'باز';
-      case 'in_progress': return 'در حال بررسی';
-      case 'waiting': return 'در انتظار پاسخ';
+      case 'in_progress': return 'در حال اقدام';
+      case 'waiting': return 'در انتظار';
       case 'resolved': return 'حل شده';
       case 'closed': return 'بسته شده';
       default: return status;
@@ -612,10 +557,10 @@ class StateManager {
 
   getPriorityLabel(priority) {
     switch (priority) {
-      case 'urgent': return 'فوری';
+      case 'urgent': return 'فوری و اضطراری';
       case 'high': return 'بالا';
       case 'normal': return 'عادی';
-      case 'low': return 'کم';
+      case 'low': return 'پایین';
       default: return priority;
     }
   }

@@ -74,44 +74,6 @@ export class TicketListComponent {
     this.container.innerHTML = `
       <div class="space-y-4 sm:space-y-6 pb-20 md:pb-6">
 
-        <!-- Google Drive Shared Team Link Card (Visible if connected) -->
-        ${state.storageMode === 'gdrive' && state.gdriveProvider.isConnected() ? `
-          <div class="bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-2xl p-3 sm:p-4 flex items-center justify-between flex-wrap gap-2.5 shadow-sm">
-            <div class="flex items-center gap-2">
-              <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span class="text-xs font-bold text-slate-800 dark:text-slate-200">دیتابیس ابری سازمانی متصل است</span>
-              <span class="text-[10px] text-slate-400 font-mono hidden sm:inline">(${state.gdriveProvider.fileId ? state.gdriveProvider.fileId.slice(0, 16) + '...' : ''})</span>
-            </div>
-            <div class="flex items-center gap-2">
-              <button id="btn-quick-copy-invite" class="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-sm">
-                ${renderIcon('share', 'w-3.5 h-3.5')}
-                <span>کپی لینک اتصال همکاران (اتصال به همین دیتابیس)</span>
-              </button>
-            </div>
-          </div>
-        ` : ''}
-
-        <!-- Connect Google Drive Prompt Banner (When file ID is set or storage mode is gdrive but not signed in) -->
-        ${!state.gdriveProvider.isConnected() && (state.storageMode === 'gdrive' || state.gdriveProvider.fileId) ? `
-          <div class="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl p-3.5 sm:p-4 flex items-center justify-between flex-wrap gap-3 shadow-lg shadow-blue-500/25 text-white">
-            <div class="flex items-center gap-2.5">
-              <span class="w-8 h-8 rounded-xl bg-white/20 text-white flex items-center justify-center shrink-0">
-                ${renderIcon('drive', 'w-5 h-5')}
-              </span>
-              <div>
-                <h4 class="font-bold text-xs sm:text-sm text-white">اتصال به پایگاه داده ابری سازمان</h4>
-                <p class="text-[11px] text-blue-100">برای دریافت و همگام‌سازی تیکت‌های مشترک، با حساب گوگل وارد شوید.</p>
-              </div>
-            </div>
-            <div class="flex items-center gap-2 mr-auto sm:mr-0">
-              <button id="btn-banner-login-google" class="px-4 py-2 rounded-xl bg-white text-blue-700 hover:bg-blue-50 text-xs font-extrabold transition flex items-center gap-1.5 shadow-md">
-                ${renderIcon('drive', 'w-4 h-4 text-blue-600')}
-                <span>ورود با گوگل و همگام‌سازی</span>
-              </button>
-            </div>
-          </div>
-        ` : ''}
-
         <!-- Header / Filters Card -->
         <div class="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 shadow-sm">
 
@@ -343,48 +305,6 @@ export class TicketListComponent {
     document.getElementById('btn-empty-new-ticket')?.addEventListener('click', () => {
       state.isTicketModalOpen = true;
       state.emit('open_ticket_modal');
-    });
-
-    document.getElementById('btn-quick-copy-invite')?.addEventListener('click', () => {
-      const inviteLink = state.gdriveProvider.getInviteLink();
-      navigator.clipboard.writeText(inviteLink).then(() => {
-        notificationEngine.triggerToast({
-          title: 'لینک اتصال همکاران کپی شد',
-          message: 'این لینک را در گوشی باز کنید یا برای همکارانتان بفرستید تا فوراً به همین پایگاه داده متصل شوند.',
-          type: 'success'
-        });
-      }).catch(() => {
-        prompt('لینک زیر را کپی کنید:', inviteLink);
-      });
-    });
-
-    document.getElementById('btn-banner-login-google')?.addEventListener('click', async () => {
-      const btn = document.getElementById('btn-banner-login-google');
-      if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = 'در حال ارتباط با گوگل...';
-      }
-      try {
-        await state.gdriveProvider.signIn();
-        state.storageMode = 'gdrive';
-        localStorage.setItem('storage_mode', 'gdrive');
-
-        const remote = await state.gdriveProvider.load();
-        if (remote && remote.tickets) {
-          state.handleRemoteData(remote, 'gdrive');
-          state.syncGoogleUserWithCurrent();
-          notificationEngine.triggerToast({
-            title: 'همگام‌سازی موفق',
-            message: 'اطلاعات مشترک سازمان دریافت گردید.',
-            type: 'success'
-          });
-        }
-        this.render();
-      } catch (e) {
-        alert('خطا در ورود به گوگل: ' + e.message);
-      } finally {
-        if (btn) btn.disabled = false;
-      }
     });
   }
 }

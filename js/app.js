@@ -7,7 +7,8 @@ import { TicketListComponent } from './components/ticketList.js';
 import { AdminTabComponent } from './components/adminTab.js';
 import { TicketModalComponent } from './components/ticketModal.js';
 import { TicketDetailComponent } from './components/ticketDetail.js';
-import { SettingsModalComponent } from './components/settingsModal.js';
+import { ProfileModalComponent } from './components/profileModal.js';
+import { LoginModalComponent } from './components/loginModal.js';
 
 class App {
   constructor() {
@@ -16,7 +17,8 @@ class App {
     this.adminTab = null;
     this.ticketModal = null;
     this.ticketDetail = null;
-    this.settingsModal = null;
+    this.profileModal = null;
+    this.loginModal = null;
   }
 
   async init() {
@@ -31,7 +33,7 @@ class App {
     // 2. Initialize Notifications Engine
     notificationEngine.init();
 
-    // 3. Register Service Worker for PWA
+    // 3. Register Service Worker for PWA & Web Push
     this.registerServiceWorker();
 
     // 4. Instantiate Components
@@ -40,7 +42,8 @@ class App {
     this.adminTab = new AdminTabComponent('admin-tab-container');
     this.ticketModal = new TicketModalComponent('ticket-modal-container');
     this.ticketDetail = new TicketDetailComponent('ticket-detail-container');
-    this.settingsModal = new SettingsModalComponent('settings-modal-container');
+    this.profileModal = new ProfileModalComponent('profile-modal-container');
+    this.loginModal = new LoginModalComponent('login-modal-container');
 
     // 5. Initial Render
     this.navbar.render();
@@ -51,52 +54,16 @@ class App {
       this.handleStateEvent(eventType, payload);
     });
 
-    // 7. Check URL for ticket query param or shared database invite link
+    // 7. Check URL for ticket query param
     const urlParams = new URLSearchParams(window.location.search);
     const initialTicketId = urlParams.get('ticket');
-    const sharedDbId = urlParams.get('db');
-    const sharedClientId = urlParams.get('client_id');
-
-    if (sharedClientId) {
-      state.gdriveProvider.saveConfig(sharedClientId, state.gdriveProvider.apiKey, state.gdriveProvider.pollIntervalMs / 1000);
-      localStorage.setItem('storage_mode', 'gdrive');
-      state.storageMode = 'gdrive';
-    }
-
-    if (sharedDbId) {
-      state.gdriveProvider.setFileId(sharedDbId);
-      localStorage.setItem('storage_mode', 'gdrive');
-      state.storageMode = 'gdrive';
-      notificationEngine.triggerToast({
-        title: 'شناسه پایگاه داده دریافت شد',
-        message: 'در حال همگام‌سازی با پایگاه داده مشترک سازمان...',
-        type: 'info'
-      });
-    }
-
     if (initialTicketId) {
       setTimeout(() => {
         this.ticketDetail.open(initialTicketId);
       }, 300);
     }
 
-    // 8. Auto-restore Google Drive session and sync if configured
-    if (state.storageMode === 'gdrive' && state.gdriveProvider.isConfigured()) {
-      try {
-        const restored = await state.gdriveProvider.autoRestoreSession();
-        if (restored) {
-          const freshData = await state.gdriveProvider.load();
-          if (freshData) {
-            state.handleRemoteData(freshData, 'gdrive');
-          }
-          state.syncGoogleUserWithCurrent();
-        }
-      } catch (err) {
-        console.warn('Auto restore Google session notice:', err);
-      }
-    }
-
-    console.log('Mana In-Company Ticketing System Ready.');
+    console.log('Mana In-Company Ticketing System Ready (Linux Server Engine).');
   }
 
   handleStateEvent(eventType, payload) {
@@ -106,7 +73,7 @@ class App {
         this.navbar.render();
         // Prevent background polling from destroying active form inputs while user is typing
         const activeEl = document.activeElement;
-        const isEditingInForm = activeEl && (activeEl.closest('#admin-tab-container') || activeEl.closest('#ticket-modal-container')) && ['INPUT', 'TEXTAREA', 'SELECT'].includes(activeEl.tagName);
+        const isEditingInForm = activeEl && (activeEl.closest('#admin-tab-container') || activeEl.closest('#ticket-modal-container') || activeEl.closest('#profile-modal-container')) && ['INPUT', 'TEXTAREA', 'SELECT'].includes(activeEl.tagName);
         if (!isEditingInForm) {
           this.renderCurrentView();
         }
@@ -125,15 +92,16 @@ class App {
         this.ticketDetail.open(payload || state.activeTicketId);
         break;
 
-      case 'open_settings_modal':
-        this.settingsModal.open();
+      case 'open_profile_modal':
+        this.profileModal.open();
+        break;
+
+      case 'open_login_modal':
+        this.loginModal.open();
         break;
 
       case 'notifications_updated':
-        this.navbar.render();
-        break;
-
-      case 'gdrive_status_change':
+      case 'server_connection_change':
         this.navbar.render();
         break;
     }

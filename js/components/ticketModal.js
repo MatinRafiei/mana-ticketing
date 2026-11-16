@@ -328,12 +328,12 @@ export class TicketModalComponent {
       try {
         const finalAttachments = [];
         for (const att of this.pendingAttachments) {
-          if (state.storageMode === 'gdrive' && state.gdriveProvider.isConnected() && att.rawFile) {
+          if (att.rawFile && state.serverProvider.isLoggedIn()) {
             try {
-              const driveFile = await state.gdriveProvider.uploadAttachment(att.rawFile);
-              finalAttachments.push(driveFile);
+              const uploaded = await state.serverProvider.uploadFile(att.rawFile);
+              finalAttachments.push(uploaded);
             } catch (upErr) {
-              console.warn('Google Drive upload failed, using local preview:', upErr);
+              console.warn('Server file upload failed, using local fallback:', upErr);
               finalAttachments.push(att);
             }
           } else {
