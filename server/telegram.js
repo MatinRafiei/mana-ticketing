@@ -1,4 +1,4 @@
-// Telegram Bot Integration Engine with Handshake, Two-Way Ticket Replies, File Downloads & Proxy Support
+// Telegram Bot Integration Engine with Handshake, Multi-Item Reply Draft Sessions, File Downloads & Proxy Support
 
 const https = require('https');
 const http = require('http');
@@ -18,8 +18,9 @@ class TelegramService {
     this.lastUpdateId = 0;
     this.botInfo = null;
     this.broadcastWs = () => {};
-    // Maps telegram chatId -> { ticketId, expiresAt }
-    this.userReplyState = new Map();
+    // Maps telegram chatId -> Draft Session Object:
+    // { ticketId, statusMessageId, texts: [], attachments: [], expiresAt }
+    this.draftSessions = new Map();
   }
 
   setBroadcast(fn) {
@@ -229,12 +230,11 @@ class TelegramService {
       ]
     ];
 
-    // If it's a ticket, provide direct Reply via Telegram button
     if (ticketId) {
       inlineKeyboard.push([
         {
           text: '💬 پاسخ به این تیکت در تلگرام',
-          callback_data: `reply:${ticketId}`
+          callback_data: `start_reply:${ticketId}`
         }
       ]);
     }
@@ -302,7 +302,7 @@ class TelegramService {
       inlineKeyboard.push([
         {
           text: '💬 پاسخ به این تیکت در تلگرام',
-          callback_data: `reply:${group.referenceId}`
+          callback_data: `start_reply:${group.referenceId}`
         }
       ]);
     }
@@ -430,7 +430,6 @@ class TelegramService {
         const currentText = cq.message.text || '';
         const updatedText = `${currentText}\n\n✅ *تایید شد توسط شما در تاریخ:* ${timeStr}`;
 
-        // Find delivery to check if it has ticket reply button
         const group = db.data.deliveries.find(d => d.id === deliveryId);
         const replyButtons = [];
 
@@ -438,7 +437,7 @@ class TelegramService {
           replyButtons.push([
             {
               text: '💬 پاسخ به این تیکت در تلگرام',
-              callback_data: `reply:${group.referenceId}`
+              callback_data: `start_reply:${group.referenceId}`
             }
           ]);
         }
@@ -475,8 +474,8 @@ class TelegramService {
       return;
     }
 
-    // B: Reply to Ticket button click: reply:<ticketId>
-    if (data.startsWith('reply:')) {
+    // B: Enter Reply Draft Mode: start_reply:<ticketId>
+    if (data.startsWith('start_reply:')) {
       const ticketId = data.split(':')[1];
       const ticket = db.data.tickets.find(t => t.id === ticketId);
 
@@ -489,25 +488,264 @@ class TelegramService {
         return;
       }
 
-      // Set user in Reply Mode for this ticket (valid for 15 minutes)
-      this.userReplyState.set(chatId, {
-        ticketId: ticket.id,
-        expiresAt: Date.now() + 15 * 60 * 1000
-      });
-
       await this.callApi('answerCallbackQuery', {
         callback_query_id: cq.id,
-        text: `در حال نوشتن پاسخ برای تیکت ${ticket.id}...`
+        text: `پیش‌نویس پاسخ برای تیکت ${ticket.id} فعال شد.`
       });
 
-      await this.callApi('sendMessage', {
+      await this.initReplyDraftSession(chatId, ticket.id);
+      return;
+    }
+
+    // C: Submit Final Draft Reply: submit_reply:<ticketId>
+    if (data.startsWith('submit_reply:')) {
+      const ticketId = data.split(':')[1];
+      await this.submitFinalDraftReply(chatId, ticketId, cq.id);
+      return;
+    }
+
+    // D: Cancel Draft Reply: cancel_reply:<ticketId>
+    if (data.startsWith('cancel_reply:')) {
+      this.draftSessions.delete(chatId);
+      await this.callApi('answerCallbackQuery', {
+        callback_query_id: cq.id,
+        text: 'پیش‌نویس پاسخ لغو شد.'
+      });
+      try {
+        await this.callApi('editMessageText', {
+          chat_id: cq.message.chat.id,
+          message_id: cq.message.message_id,
+          text: '❌ *عملیات پاسخ‌دهی به تیکت لغو شد.*',
+          parse_mode: 'Markdown'
+        });
+      } catch (e) {}
+      return;
+    }
+  }
+
+  // --- Initialize Draft Session for Multi-Item Reply ---
+  async initReplyDraftSession(chatId, ticketId) {
+    const ticket = db.data.tickets.find(t => t.id === ticketId);
+    if (!ticket) return;
+
+    const draftText = `📝 *پیش‌نویس پاسخ به تیکت:* \`${ticket.id}\`\n` +
+                      `📌 *عنوان تیکت:* ${this.escapeMarkdown(ticket.title)}\n\n` +
+                      `▫️ *متن پاسخ:* _(هنوز متنی ارسال نشده)_\n` +
+                      `▫️ *فایل‌های پیوست:* _(۰ فایل)_\n\n` +
+                      `👇 *راهنما:* اکنون می‌توانید به نوبت پیام‌های متنی، عکس‌ها یا فایل‌های مورد نظرتان را بفرستید. هر پیامی که بفرستید به این پیش‌نویس اضافه خواهد شد.\n` +
+                      `پس از اتمام، دکمه «تایید و ارسال نهایی پاسخ» را بزنید:`;
+
+    const inlineKeyboard = [
+      [
+        {
+          text: '📤 تایید و ارسال نهایی پاسخ به تیکت',
+          callback_data: `submit_reply:${ticket.id}`
+        }
+      ],
+      [
+        {
+          text: '❌ لغو و انصراف',
+          callback_data: `cancel_reply:${ticket.id}`
+        }
+      ]
+    ];
+
+    const sent = await this.callApi('sendMessage', {
+      chat_id: chatId,
+      text: draftText,
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: inlineKeyboard
+      }
+    });
+
+    this.draftSessions.set(chatId, {
+      ticketId: ticket.id,
+      statusMessageId: sent.message_id,
+      texts: [],
+      attachments: [],
+      expiresAt: Date.now() + 30 * 60 * 1000 // 30 minutes active
+    });
+  }
+
+  // --- Live Update of the Draft Status Message in Telegram ---
+  async updateDraftStatusMessage(chatId) {
+    const session = this.draftSessions.get(chatId);
+    if (!session || !session.statusMessageId) return;
+
+    const ticket = db.data.tickets.find(t => t.id === session.ticketId);
+    if (!ticket) return;
+
+    const combinedText = session.texts.join('\n\n');
+    const textPreview = combinedText ? this.escapeMarkdown(combinedText.slice(0, 300) + (combinedText.length > 300 ? '...' : '')) : '_(هنوز متنی وارد نشده)_';
+
+    let filesPreview = '_(۰ فایل)_';
+    if (session.attachments.length > 0) {
+      filesPreview = session.attachments.map((att, idx) => {
+        const sizeKb = Math.round(att.size / 1024);
+        return `   ${idx + 1}. 📎 *${this.escapeMarkdown(att.name)}* (${sizeKb} KB)`;
+      }).join('\n');
+    }
+
+    const draftText = `📝 *پیش‌نویس پاسخ به تیکت:* \`${ticket.id}\`\n` +
+                      `📌 *عنوان تیکت:* ${this.escapeMarkdown(ticket.title)}\n\n` +
+                      `▫️ *متن پاسخ:* \n${textPreview}\n\n` +
+                      `▫️ *فایل‌های پیوست (${session.attachments.length} عدد):*\n${filesPreview}\n\n` +
+                      `💡 _می‌توانید همچنان فایل یا توضیحات دیگری ارسال کنید._\n` +
+                      `هر زمان آماده بودید، دکمه زیر را جهت ارسال ثبت نهایی لمس فرمایید:`;
+
+    const inlineKeyboard = [
+      [
+        {
+          text: `📤 تایید و ثبت نهایی (${session.attachments.length} پیوست)`,
+          callback_data: `submit_reply:${ticket.id}`
+        }
+      ],
+      [
+        {
+          text: '❌ لغو و انصراف',
+          callback_data: `cancel_reply:${ticket.id}`
+        }
+      ]
+    ];
+
+    try {
+      await this.callApi('editMessageText', {
         chat_id: chatId,
-        text: `💬 *ثبت پاسخ برای تیکت:* \`${ticket.id}\`\n*عنوان:* ${this.escapeMarkdown(ticket.title)}\n\n` +
-              `✍️ لطفاً پیام متنی، عکس، فایل پیوست یا پیام صوتی خود را ارسال فرمایید تا مستقیماً در سامانه ثبت شود.\n\n` +
-              `_(برای انصراف عبارت /cancel را بفرستید)_`,
+        message_id: session.statusMessageId,
+        text: draftText,
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: inlineKeyboard
+        }
+      });
+    } catch (err) {
+      // Ignore if identical or edited already
+    }
+  }
+
+  // --- Submit Final Draft to Ticket & Web Panel ---
+  async submitFinalDraftReply(chatId, ticketId, callbackQueryId) {
+    const user = db.findUserByTelegramChatId(chatId);
+    if (!user) {
+      if (callbackQueryId) {
+        await this.callApi('answerCallbackQuery', {
+          callback_query_id: callbackQueryId,
+          text: '❌ حساب شما متصل نیست.',
+          show_alert: true
+        });
+      }
+      return;
+    }
+
+    const session = this.draftSessions.get(chatId);
+    if (!session || session.ticketId !== ticketId) {
+      if (callbackQueryId) {
+        await this.callApi('answerCallbackQuery', {
+          callback_query_id: callbackQueryId,
+          text: 'پیش‌نویس پاسخ منقضی یا بسته شده است.',
+          show_alert: true
+        });
+      }
+      return;
+    }
+
+    const ticket = db.data.tickets.find(t => t.id === ticketId);
+    if (!ticket) {
+      if (callbackQueryId) {
+        await this.callApi('answerCallbackQuery', {
+          callback_query_id: callbackQueryId,
+          text: '❌ تیکت یافت نشد.',
+          show_alert: true
+        });
+      }
+      this.draftSessions.delete(chatId);
+      return;
+    }
+
+    const combinedText = session.texts.join('\n\n').trim();
+    if (!combinedText && session.attachments.length === 0) {
+      if (callbackQueryId) {
+        await this.callApi('answerCallbackQuery', {
+          callback_query_id: callbackQueryId,
+          text: '⚠️ پیش‌نویس شما خالی است! لطفاً حداقل یک متن یا فایل ارسال نمایید.',
+          show_alert: true
+        });
+      }
+      return;
+    }
+
+    const finalText = combinedText || (session.attachments.length > 0 ? `پیوست‌های ارسالی (${session.attachments.length} فایل)` : 'پاسخ ارسالی از تلگرام');
+
+    // Create formal reply
+    const reply = {
+      id: 'rep_tg_' + Date.now(),
+      authorId: user.id,
+      content: finalText,
+      attachments: [...session.attachments],
+      createdAt: new Date().toISOString()
+    };
+
+    ticket.replies.push(reply);
+    ticket.updatedAt = new Date().toISOString();
+    db.save();
+
+    // Clean up session
+    const statusMsgId = session.statusMessageId;
+    this.draftSessions.delete(chatId);
+
+    if (callbackQueryId) {
+      await this.callApi('answerCallbackQuery', {
+        callback_query_id: callbackQueryId,
+        text: '✅ پاسخ با موفقیت روی سرور ذخیره شد.'
+      });
+    }
+
+    // 1. Update the Telegram status message to confirmed
+    try {
+      await this.callApi('editMessageText', {
+        chat_id: chatId,
+        message_id: statusMsgId,
+        text: `✅ *پاسخ شما با موفقیت در تیکت ${ticket.id} ثبت گردید.*\n\n` +
+              `📝 *متن:* ${this.escapeMarkdown(finalText)}\n` +
+              `📎 *پیوست‌ها:* ${reply.attachments.length} فایل\n\n` +
+              `⚡️ این پاسخ در لحظه روی سامانه وب تیکتینگ و برای سایر همکاران قابل مشاهده شد.`,
         parse_mode: 'Markdown'
       });
-      return;
+    } catch (e) {}
+
+    // 2. Real-time broadcast to Web and Mobile Panels (<50ms sync!)
+    this.broadcastWs({
+      type: 'TICKET_REPLY_ADDED',
+      ticketId: ticket.id,
+      reply,
+      ticket
+    });
+
+    // 3. Dispatch notifications to other participants
+    const allParticipants = [ticket.creatorId, ticket.assigneeId, ...(ticket.taggedUserIds || [])];
+    const notifyIds = Array.from(new Set(allParticipants)).filter(id => id && id !== user.id);
+
+    if (notifyIds.length > 0) {
+      const delivery = db.createDelivery({
+        type: 'ticket',
+        referenceId: ticket.id,
+        title: `پاسخ جدید در تیکت ${ticket.id}: ${ticket.title}`,
+        message: `${user.name} (از تلگرام): ${reply.content.slice(0, 150)}`,
+        targetUserIds: notifyIds,
+        creatorId: user.id
+      });
+
+      for (const targetUid of notifyIds) {
+        await this.sendNotificationWithHandshake({
+          deliveryId: delivery.id,
+          userId: targetUid,
+          title: `پاسخ جدید در تیکت ${ticket.id}: ${ticket.title}`,
+          message: `${user.name} (از تلگرام): ${reply.content.slice(0, 150)}`,
+          ticketId: ticket.id,
+          priority: ticket.priority
+        });
+      }
     }
   }
 
@@ -519,11 +757,11 @@ class TelegramService {
 
     // Check cancel command
     if (text === '/cancel') {
-      if (this.userReplyState.has(chatId)) {
-        this.userReplyState.delete(chatId);
+      if (this.draftSessions.has(chatId)) {
+        this.draftSessions.delete(chatId);
         await this.callApi('sendMessage', {
           chat_id: chatId,
-          text: 'عملیات ارسال پاسخ لغو شد.'
+          text: '❌ پیش‌نویس پاسخ لغو گردید.'
         });
         return;
       }
@@ -543,7 +781,7 @@ class TelegramService {
             chat_id: chatId,
             text: `🎉 *حساب شما با موفقیت متصل شد!*\n\n` +
                   `همکار گرامی *${matchedUser.name}* (${matchedUser.department})،\n` +
-                  `اکنون تمام تیکت‌ها، پاسخ‌ها و اعلانات سازمانی برای شما ارسال شده و می‌توانید با زدن دکمه «پاسخ به این تیکت»، مستقیماً از تلگرام فایل و پاسخ بفرستید.`,
+                  `اکنون تمام تیکت‌ها، پاسخ‌ها و اعلانات سازمانی برای شما ارسال شده و می‌توانید با زدن دکمه «پاسخ به این تیکت»، متن و چندین فایل را ارسال نموده و تایید نهایی کنید.`,
             parse_mode: 'Markdown'
           });
 
@@ -561,7 +799,7 @@ class TelegramService {
       if (existingUser) {
         await this.callApi('sendMessage', {
           chat_id: chatId,
-          text: `سلام *${existingUser.name}* عزیز 👋\nاکانت تلگرام شما متصل است. تیکت‌ها برای شما ارسال می‌شوند و می‌توانید به آنها پاسخ دهید یا عکس/فایل ضمیمه کنید.`,
+          text: `سلام *${existingUser.name}* عزیز 👋\nاکانت تلگرام شما متصل است. برای پاسخ به هر تیکت کافیست دکمه «💬 پاسخ به این تیکت» زیر پیام آن را لمس نمایید.`,
           parse_mode: 'Markdown'
         });
         return;
@@ -602,172 +840,97 @@ class TelegramService {
     }
 
     // -----------------------------------------------------------------
-    // TICKET REPLY HANDLING (Via Active Reply Mode OR Native Telegram Reply)
+    // ACCUMULATE TEXT & ATTACHMENTS INTO DRAFT SESSION
     // -----------------------------------------------------------------
-    let targetTicketId = null;
+    let session = this.draftSessions.get(chatId);
 
-    // Check 1: User is currently in "Reply Mode"
-    if (this.userReplyState.has(chatId)) {
-      const state = this.userReplyState.get(chatId);
-      if (Date.now() <= state.expiresAt) {
-        targetTicketId = state.ticketId;
-      } else {
-        this.userReplyState.delete(chatId);
-      }
-    }
-
-    // Check 2: Native Telegram Swipe-to-Reply on bot's message
-    if (!targetTicketId && msg.reply_to_message) {
+    // If no active draft session, check if user did native Swipe-to-Reply on a ticket message
+    if (!session && msg.reply_to_message) {
       const repliedMsgId = msg.reply_to_message.message_id;
-      // Search in deliveries for which ticket this message belongs to
       for (const group of db.data.deliveries) {
         if (group.type === 'ticket' && group.referenceId) {
           const rec = group.recipients.find(r => r.telegramMessageId === repliedMsgId);
           if (rec) {
-            targetTicketId = group.referenceId;
+            await this.initReplyDraftSession(chatId, group.referenceId);
+            session = this.draftSessions.get(chatId);
             break;
           }
         }
       }
     }
 
-    // If target ticket is identified, process the reply!
-    if (targetTicketId) {
-      await this.processTicketReply(chatId, targetTicketId, msg);
-      return;
+    // If user is inside a draft session, accumulate this message!
+    if (session) {
+      if (Date.now() > session.expiresAt) {
+        this.draftSessions.delete(chatId);
+        await this.callApi('sendMessage', {
+          chat_id: chatId,
+          text: '⏱ زمان پیش‌نویس منقضی شد. لطفاً مجدداً دکمه «پاسخ به تیکت» را لمس فرمایید.'
+        });
+        return;
+      }
+
+      let addedSomething = false;
+
+      // 1. Accumulate Text / Caption
+      const incomingText = text || caption;
+      if (incomingText) {
+        session.texts.push(incomingText);
+        addedSomething = true;
+      }
+
+      // 2. Download and accumulate Photos
+      if (msg.photo && Array.isArray(msg.photo) && msg.photo.length > 0) {
+        try {
+          const photo = msg.photo[msg.photo.length - 1];
+          const att = await this.downloadTelegramFile(photo.file_id, 'photo.jpg');
+          session.attachments.push(att);
+          addedSomething = true;
+        } catch (e) {
+          console.error('Photo download error:', e);
+        }
+      }
+      // 3. Download and accumulate Documents
+      else if (msg.document) {
+        try {
+          const att = await this.downloadTelegramFile(msg.document.file_id, msg.document.file_name || 'document');
+          session.attachments.push(att);
+          addedSomething = true;
+        } catch (e) {
+          console.error('Document download error:', e);
+        }
+      }
+      // 4. Download and accumulate Voice / Audio
+      else if (msg.voice) {
+        try {
+          const att = await this.downloadTelegramFile(msg.voice.file_id, 'voice_message.ogg');
+          session.attachments.push(att);
+          addedSomething = true;
+        } catch (e) {
+          console.error('Voice download error:', e);
+        }
+      } else if (msg.audio) {
+        try {
+          const att = await this.downloadTelegramFile(msg.audio.file_id, msg.audio.file_name || 'audio.mp3');
+          session.attachments.push(att);
+          addedSomething = true;
+        } catch (e) {
+          console.error('Audio download error:', e);
+        }
+      }
+
+      if (addedSomething) {
+        // Live update the draft preview status message in Telegram!
+        await this.updateDraftStatusMessage(chatId);
+        return;
+      }
     }
 
     // Default Fallback
     await this.callApi('sendMessage', {
       chat_id: chatId,
-      text: `پیام دریافت شد. جهت پاسخ به یک تیکت، دکمه «💬 پاسخ به این تیکت» زیر پیام تیکت را بزنید یا مستقیماً روی پیام تیکت Reply کنید.`
+      text: `پیام دریافت شد. جهت پاسخ به یک تیکت، دکمه «💬 پاسخ به این تیکت» را لمس کنید.`
     });
-  }
-
-  async processTicketReply(chatId, ticketId, msg) {
-    const user = db.findUserByTelegramChatId(chatId);
-    if (!user) {
-      await this.callApi('sendMessage', {
-        chat_id: chatId,
-        text: '❌ حساب شما متصل نیست. لطفاً ابتدا کد ۶ رقمی را ارسال کنید.'
-      });
-      return;
-    }
-
-    const ticket = db.data.tickets.find(t => t.id === ticketId);
-    if (!ticket) {
-      await this.callApi('sendMessage', {
-        chat_id: chatId,
-        text: '❌ تیکت مورد نظر در سامانه یافت نشد.'
-      });
-      this.userReplyState.delete(chatId);
-      return;
-    }
-
-    const attachments = [];
-    let replyText = (msg.text || msg.caption || '').trim();
-
-    try {
-      // 1. Process Photos
-      if (msg.photo && Array.isArray(msg.photo) && msg.photo.length > 0) {
-        // Take the highest resolution photo (last element)
-        const photo = msg.photo[msg.photo.length - 1];
-        const att = await this.downloadTelegramFile(photo.file_id, 'photo.jpg');
-        attachments.push(att);
-        if (!replyText) replyText = 'تصویر ارسالی از تلگرام';
-      }
-      // 2. Process Document
-      else if (msg.document) {
-        const att = await this.downloadTelegramFile(msg.document.file_id, msg.document.file_name || 'document');
-        attachments.push(att);
-        if (!replyText) replyText = `فایل ضمیمه: ${msg.document.file_name || 'سند'}`;
-      }
-      // 3. Process Voice / Audio Note
-      else if (msg.voice) {
-        const att = await this.downloadTelegramFile(msg.voice.file_id, 'voice_message.ogg');
-        attachments.push(att);
-        if (!replyText) replyText = 'پیام صوتی ارسالی از تلگرام';
-      } else if (msg.audio) {
-        const att = await this.downloadTelegramFile(msg.audio.file_id, msg.audio.file_name || 'audio.mp3');
-        attachments.push(att);
-        if (!replyText) replyText = `صدا: ${msg.audio.file_name || 'فایل صوتی'}`;
-      }
-
-      if (!replyText && attachments.length === 0) {
-        await this.callApi('sendMessage', {
-          chat_id: chatId,
-          text: '⚠️ لطفاً متن، عکس یا فایل ارسال نمایید.'
-        });
-        return;
-      }
-
-      // Create formal reply
-      const reply = {
-        id: 'rep_tg_' + Date.now(),
-        authorId: user.id,
-        content: replyText,
-        attachments: attachments,
-        createdAt: new Date().toISOString()
-      };
-
-      ticket.replies.push(reply);
-      ticket.updatedAt = new Date().toISOString();
-      db.save();
-
-      // Clear user reply state
-      this.userReplyState.delete(chatId);
-
-      // 1. Broadcast to all open Web and Mobile Dashboards (<50ms real-time sync!)
-      this.broadcastWs({
-        type: 'TICKET_REPLY_ADDED',
-        ticketId: ticket.id,
-        reply,
-        ticket
-      });
-
-      // 2. Dispatch notifications to other participants
-      const allParticipants = [ticket.creatorId, ticket.assigneeId, ...(ticket.taggedUserIds || [])];
-      const notifyIds = Array.from(new Set(allParticipants)).filter(id => id && id !== user.id);
-
-      if (notifyIds.length > 0) {
-        const delivery = db.createDelivery({
-          type: 'ticket',
-          referenceId: ticket.id,
-          title: `پاسخ جدید در تیکت ${ticket.id}: ${ticket.title}`,
-          message: `${user.name} (از تلگرام): ${reply.content.slice(0, 150)}`,
-          targetUserIds: notifyIds,
-          creatorId: user.id
-        });
-
-        for (const targetUid of notifyIds) {
-          await this.sendNotificationWithHandshake({
-            deliveryId: delivery.id,
-            userId: targetUid,
-            title: `پاسخ جدید در تیکت ${ticket.id}: ${ticket.title}`,
-            message: `${user.name} (از تلگرام): ${reply.content.slice(0, 150)}`,
-            ticketId: ticket.id,
-            priority: ticket.priority
-          });
-        }
-      }
-
-      // 3. Confirm to the sender in Telegram
-      await this.callApi('sendMessage', {
-        chat_id: chatId,
-        text: `✅ *پاسخ شما با موفقیت در تیکت ثبت شد!*\n\n` +
-              `📌 تیکت: \`${ticket.id}\`\n` +
-              `📝 متن: ${this.escapeMarkdown(replyText)}\n` +
-              (attachments.length > 0 ? `📎 تعداد پیوست: ${attachments.length} فایل\n` : '') +
-              `⚡️ پاسخ بلافاصله روی پنل وب و سامانه پرسنل نمایش داده شد.`,
-        parse_mode: 'Markdown'
-      });
-    } catch (err) {
-      console.error('Failed to process Telegram reply:', err);
-      await this.callApi('sendMessage', {
-        chat_id: chatId,
-        text: `❌ خطا در ذخیره پاسخ: ${err.message}`
-      });
-    }
   }
 
   escapeMarkdown(text) {
