@@ -9,7 +9,7 @@ const DEFAULT_ROLES = [
   {
     id: 'admin',
     name: 'مدیر سیستم (Admin)',
-    description: 'دسترسی کامل به تمامی بخش‌های تیکتینگ، گزارشات، تعریف نقش‌ها و ارجاعات',
+    description: 'دسترسی کامل به تمامی بخش‌های تیکتینگ، گزارشات، تعریف نقش‌ها، اعلانات و ارجاعات',
     isSystem: true,
     permissions: [
       'view_all_tickets',
@@ -19,7 +19,8 @@ const DEFAULT_ROLES = [
       'reassign_ticket',
       'manage_roles',
       'manage_users',
-      'view_reports'
+      'view_reports',
+      'manage_announcements'
     ]
   },
   {
@@ -65,7 +66,9 @@ class Database {
       roles: [],
       tickets: [],
       push_subscriptions: [],
-      login_logs: []
+      login_logs: [],
+      announcements: [],
+      deliveries: []
     };
     this.init();
   }
@@ -98,9 +101,32 @@ class Database {
       this.data.system_settings.jwt_secret = 'mana_secret_' + Math.random().toString(36).slice(2) + Date.now();
     }
 
+    // Telegram Bot Settings Defaults
+    if (this.data.system_settings.telegram_bot_token === undefined) {
+      this.data.system_settings.telegram_bot_token = '';
+    }
+    if (this.data.system_settings.telegram_proxy_url === undefined) {
+      this.data.system_settings.telegram_proxy_url = ''; // e.g. http://127.0.0.1:10809 or socks5://127.0.0.1:10808
+    }
+    if (this.data.system_settings.telegram_auto_resend_enabled === undefined) {
+      this.data.system_settings.telegram_auto_resend_enabled = true;
+    }
+    if (this.data.system_settings.telegram_resend_interval_mins === undefined) {
+      this.data.system_settings.telegram_resend_interval_mins = 30; // default: 30 minutes
+    }
+    if (this.data.system_settings.telegram_max_resends === undefined) {
+      this.data.system_settings.telegram_max_resends = 3; // default: up to 3 reminders
+    }
+
     // Initialize Default Roles
     if (!this.data.roles || this.data.roles.length === 0) {
       this.data.roles = [...DEFAULT_ROLES];
+    } else {
+      // Ensure admin has manage_announcements
+      const adminRole = this.data.roles.find(r => r.id === 'admin');
+      if (adminRole && !adminRole.permissions.includes('manage_announcements')) {
+        adminRole.permissions.push('manage_announcements');
+      }
     }
 
     // Initialize default Manager user if no users exist
@@ -117,17 +143,33 @@ class Database {
         avatar: './icons/company_logo.png',
         initials: 'م‌س',
         isRestricted: false,
+        telegramChatId: null,
+        telegramUsername: null,
+        telegramAuthCode: this.generateTelegramAuthCode(),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
       this.data.users.push(managerUser);
+    } else {
+      // Ensure every user has telegramAuthCode
+      this.data.users.forEach(u => {
+        if (!u.telegramAuthCode) {
+          u.telegramAuthCode = this.generateTelegramAuthCode();
+        }
+      });
     }
 
     if (!this.data.tickets) this.data.tickets = [];
     if (!this.data.push_subscriptions) this.data.push_subscriptions = [];
     if (!this.data.login_logs) this.data.login_logs = [];
+    if (!this.data.announcements) this.data.announcements = [];
+    if (!this.data.deliveries) this.data.deliveries = [];
 
     this.save();
+  }
+
+  generateTelegramAuthCode() {
+    return Math.floor(100000 + Math.random() * 900000).toString();
   }
 
   save() {
@@ -153,7 +195,6 @@ class Database {
       timestamp: new Date().toISOString()
     };
     this.data.login_logs.unshift(log);
-    // Keep last 1000 logs
     if (this.data.login_logs.length > 1000) {
       this.data.login_logs = this.data.login_logs.slice(0, 1000);
     }
@@ -161,39 +202,49 @@ class Database {
     return log;
   }
 
-  getLoginLogs(limit = 100) {
-    return this.data.login_logs.slice(0, limit);
-  }
-
-  // --- Users Management ---
-  findUserByEmail(email) {
-    if (!email) return null;
-    const cleanEmail = email.toLowerCase().trim();
-    return this.data.users.find(u => u.email && u.email.toLowerCase().trim() === cleanEmail);
-  }
-
+  // --- Users CRUD ---
   findUserById(id) {
     return this.data.users.find(u => u.id === id);
   }
 
-  createUser({ email, password, name, department, roleId, avatar }) {
-    const cleanEmail = email.toLowerCase().trim();
-    if (this.findUserByEmail(cleanEmail)) {
-      throw new Error('این ایمیل قبلاً در سامانه ثبت شده است.');
+  findUserByEmail(email) {
+    if (!email) return null;
+    return this.data.users.find(u => u.email.toLowerCase() === email.toLowerCase().trim());
+  }
+
+  findUserByTelegramAuthCode(code) {
+    if (!code) return null;
+    return this.data.users.find(u => u.telegramAuthCode === code.toString().trim());
+  }
+
+  findUserByTelegramChatId(chatId) {
+    if (!chatId) return null;
+    return this.data.users.find(u => u.telegramChatId && u.telegramChatId.toString() === chatId.toString());
+  }
+
+  createUser({ email, password, name, department, roleId }) {
+    const existing = this.findUserByEmail(email);
+    if (existing) {
+      throw new Error('کاربر با این ایمیل از قبل در سامانه تعریف شده است.');
     }
 
     const salt = bcrypt.genSaltSync(10);
-    const initials = (name || 'کاربر').split(' ').map(p => p[0]).join('‌');
+    const id = 'u_' + Date.now() + '_' + Math.random().toString(36).slice(2, 5);
+    const initials = name ? name.split(' ').map(p => p[0]).join('‌') : 'ک‌ج';
+
     const newUser = {
-      id: 'u_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
-      email: cleanEmail,
+      id,
+      email: email.toLowerCase().trim(),
       password_hash: bcrypt.hashSync(password || '123456', salt),
-      name: (name || cleanEmail.split('@')[0]).trim(),
-      department: (department || 'عمومی').trim(),
+      name: name ? name.trim() : email.split('@')[0],
+      department: department ? department.trim() : 'عمومی',
       roleId: roleId || 'member',
-      avatar: avatar || './icons/company_logo.png',
+      avatar: './icons/company_logo.png',
       initials: initials || 'ک‌ج',
       isRestricted: false,
+      telegramChatId: null,
+      telegramUsername: null,
+      telegramAuthCode: this.generateTelegramAuthCode(),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
@@ -205,29 +256,19 @@ class Database {
 
   updateUser(id, updates) {
     const user = this.findUserById(id);
-    if (!user) throw new Error('کاربر مورد نظر یافت نشد.');
-
-    if (updates.email && updates.email.toLowerCase().trim() !== user.email) {
-      const cleanEmail = updates.email.toLowerCase().trim();
-      const existing = this.findUserByEmail(cleanEmail);
-      if (existing && existing.id !== id) {
-        throw new Error('این ایمیل به کاربر دیگری اختصاص دارد.');
-      }
-      user.email = cleanEmail;
-    }
+    if (!user) throw new Error('کاربر یافت نشد.');
 
     if (updates.name !== undefined) user.name = updates.name.trim();
     if (updates.department !== undefined) user.department = updates.department.trim();
     if (updates.roleId !== undefined) user.roleId = updates.roleId;
     if (updates.avatar !== undefined) user.avatar = updates.avatar;
     if (updates.isRestricted !== undefined) user.isRestricted = Boolean(updates.isRestricted);
+    if (updates.telegramChatId !== undefined) user.telegramChatId = updates.telegramChatId;
+    if (updates.telegramUsername !== undefined) user.telegramUsername = updates.telegramUsername;
+
     if (updates.password) {
       const salt = bcrypt.genSaltSync(10);
       user.password_hash = bcrypt.hashSync(updates.password, salt);
-    }
-
-    if (user.name) {
-      user.initials = user.name.split(' ').map(p => p[0]).join('‌');
     }
 
     user.updatedAt = new Date().toISOString();
@@ -235,10 +276,22 @@ class Database {
     return user;
   }
 
-  setUserRestricted(id, isRestricted) {
-    const user = this.findUserById(id);
-    if (!user) throw new Error('کاربر یافت نشد.');
-    user.isRestricted = Boolean(isRestricted);
+  linkUserTelegram(userId, chatId, username) {
+    const user = this.findUserById(userId);
+    if (!user) return null;
+    user.telegramChatId = chatId.toString();
+    user.telegramUsername = username || null;
+    user.updatedAt = new Date().toISOString();
+    this.save();
+    return user;
+  }
+
+  unlinkUserTelegram(userId) {
+    const user = this.findUserById(userId);
+    if (!user) return null;
+    user.telegramChatId = null;
+    user.telegramUsername = null;
+    user.telegramAuthCode = this.generateTelegramAuthCode();
     user.updatedAt = new Date().toISOString();
     this.save();
     return user;
@@ -246,52 +299,20 @@ class Database {
 
   deleteUser(id) {
     if (this.data.users.length <= 1) {
-      throw new Error('حداقل یک کاربر باید در سامانه باقی بماند.');
+      throw new Error('امکان حذف تنها کاربر باقی‌مانده در سامانه وجود ندارد.');
     }
-    this.data.users = this.data.users.filter(u => u.id !== id);
-    // Remove user push subscriptions
-    this.data.push_subscriptions = this.data.push_subscriptions.filter(s => s.userId !== id);
-    this.save();
-    return true;
-  }
-
-  // --- Roles Management ---
-  createRole({ name, description, permissions }) {
-    const id = 'role_' + Date.now();
-    const newRole = {
-      id,
-      name: name.trim(),
-      description: (description || '').trim(),
-      isSystem: false,
-      permissions: permissions || ['create_ticket']
-    };
-    this.data.roles.push(newRole);
-    this.save();
-    return newRole;
-  }
-
-  deleteRole(roleId) {
-    const role = this.data.roles.find(r => r.id === roleId);
-    if (!role) throw new Error('نقش یافت نشد.');
-    if (role.isSystem || role.id === 'admin') {
-      throw new Error('امکان حذف نقش‌های سیستمی پیش‌فرض وجود ندارد.');
-    }
-    // Reassign users with this role to 'member'
-    this.data.users.forEach(u => {
-      if (u.roleId === roleId) u.roleId = 'member';
-    });
-    this.data.roles = this.data.roles.filter(r => r.id !== roleId);
+    const idx = this.data.users.findIndex(u => u.id === id);
+    if (idx === -1) throw new Error('کاربر یافت نشد.');
+    this.data.users.splice(idx, 1);
     this.save();
     return true;
   }
 
   // --- Push Subscriptions ---
   savePushSubscription(userId, subscription, userAgent, ip) {
-    if (!subscription || !subscription.endpoint) return null;
-    // Remove any existing subscription with the same endpoint
     this.data.push_subscriptions = this.data.push_subscriptions.filter(s => s.endpoint !== subscription.endpoint);
     const newSub = {
-      id: 'sub_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+      id: 'sub_' + Date.now() + '_' + Math.random().toString(36).slice(2, 5),
       userId,
       endpoint: subscription.endpoint,
       keys: subscription.keys,
@@ -314,6 +335,80 @@ class Database {
     return this.data.push_subscriptions.filter(s => userIds.includes(s.userId));
   }
 
+  // --- Deliveries & Interaction Tracking ---
+  createDelivery({ type, referenceId, title, message, targetUserIds, creatorId }) {
+    const deliveryGroup = {
+      id: 'del_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+      type: type || 'ticket', // 'ticket' | 'announcement'
+      referenceId: referenceId || null,
+      title: title || '',
+      message: message || '',
+      creatorId: creatorId || 'system',
+      createdAt: new Date().toISOString(),
+      recipients: []
+    };
+
+    targetUserIds.forEach(uid => {
+      const u = this.findUserById(uid);
+      deliveryGroup.recipients.push({
+        userId: uid,
+        userName: u ? u.name : 'نامشخص',
+        userEmail: u ? u.email : '',
+        telegramChatId: u ? u.telegramChatId : null,
+        telegramMessageId: null,
+        status: 'pending', // 'pending', 'sent', 'acknowledged'
+        acknowledgedAt: null,
+        resendCount: 0,
+        lastSentAt: null
+      });
+    });
+
+    this.data.deliveries.unshift(deliveryGroup);
+    // Keep last 500 deliveries
+    if (this.data.deliveries.length > 500) {
+      this.data.deliveries = this.data.deliveries.slice(0, 500);
+    }
+    this.save();
+    return deliveryGroup;
+  }
+
+  updateRecipientStatus(deliveryId, userId, updates) {
+    const group = this.data.deliveries.find(d => d.id === deliveryId);
+    if (!group) return null;
+    const recipient = group.recipients.find(r => r.userId === userId);
+    if (!recipient) return null;
+
+    Object.assign(recipient, updates);
+    this.save();
+    return { group, recipient };
+  }
+
+  acknowledgeDelivery(deliveryId, userId) {
+    return this.updateRecipientStatus(deliveryId, userId, {
+      status: 'acknowledged',
+      acknowledgedAt: new Date().toISOString()
+    });
+  }
+
+  // --- Announcements CRUD ---
+  createAnnouncement({ title, content, targetDepartment, priority, creatorId }) {
+    const announcement = {
+      id: 'ann_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+      title: title.trim(),
+      content: content.trim(),
+      targetDepartment: targetDepartment || 'all',
+      priority: priority || 'normal', // 'urgent', 'high', 'normal'
+      creatorId: creatorId || 'system',
+      createdAt: new Date().toISOString()
+    };
+    this.data.announcements.unshift(announcement);
+    if (this.data.announcements.length > 200) {
+      this.data.announcements = this.data.announcements.slice(0, 200);
+    }
+    this.save();
+    return announcement;
+  }
+
   // --- Superadmin Settings ---
   updateSuperadminPassword(newPassword) {
     const salt = bcrypt.genSaltSync(10);
@@ -326,11 +421,23 @@ class Database {
     this.save();
   }
 
+  updateTelegramSettings({ botToken, proxyUrl, autoResendEnabled, resendIntervalMins, maxResends }) {
+    if (botToken !== undefined) this.data.system_settings.telegram_bot_token = (botToken || '').trim();
+    if (proxyUrl !== undefined) this.data.system_settings.telegram_proxy_url = (proxyUrl || '').trim();
+    if (autoResendEnabled !== undefined) this.data.system_settings.telegram_auto_resend_enabled = Boolean(autoResendEnabled);
+    if (resendIntervalMins !== undefined) this.data.system_settings.telegram_resend_interval_mins = parseInt(resendIntervalMins, 10) || 30;
+    if (maxResends !== undefined) this.data.system_settings.telegram_max_resends = parseInt(maxResends, 10) || 3;
+    this.save();
+    return this.data.system_settings;
+  }
+
   // --- Factory Reset ---
   factoryReset() {
     this.data.tickets = [];
     this.data.login_logs = [];
     this.data.push_subscriptions = [];
+    this.data.announcements = [];
+    this.data.deliveries = [];
     // Reset users to initial manager
     const salt = bcrypt.genSaltSync(10);
     this.data.users = [
@@ -344,6 +451,9 @@ class Database {
         avatar: './icons/company_logo.png',
         initials: 'م‌س',
         isRestricted: false,
+        telegramChatId: null,
+        telegramUsername: null,
+        telegramAuthCode: this.generateTelegramAuthCode(),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       }

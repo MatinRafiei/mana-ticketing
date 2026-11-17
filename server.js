@@ -6,6 +6,8 @@ const { WebSocketServer } = require('ws');
 
 const db = require('./server/db');
 const pushService = require('./server/push');
+const telegramService = require('./server/telegram');
+const reminderScheduler = require('./server/scheduler');
 const superadminRoutes = require('./server/routes/superadmin');
 const apiRoutes = require('./server/routes/api');
 
@@ -35,8 +37,9 @@ function broadcastWs(data) {
   }
 }
 
-// Inject broadcast to API router
+// Inject broadcast to API router & Telegram service
 apiRoutes.setBroadcast(broadcastWs);
+telegramService.setBroadcast(broadcastWs);
 
 // Express Middlewares
 app.use(cors());
@@ -61,14 +64,19 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
+// Start Telegram Polling & Auto-Resend Scheduler
+if (db.data.system_settings.telegram_bot_token) {
+  telegramService.startPolling();
+}
+reminderScheduler.start();
+
 // Start Server
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
   console.log('==================================================');
-  console.log(`🚀 سامانه تیکتینگ مانا روی پورت ${PORT} آماده به کار است.`);
+  console.log(`🚀 سامانه تیکتینگ و اعلانات مانا روی پورت ${PORT} آماده به کار است.`);
   console.log(`🌐 آدرس وب‌اپلیکیشن:  http://localhost:${PORT}`);
   console.log(`🔐 پنل مدیریت ارشد:   http://localhost:${PORT}/superadmin.html`);
-  console.log(`👤 کاربر سوپرادمین:   superadmin`);
-  console.log(`🔑 رمز پیش‌فرض:       admin123456`);
+  console.log(`🤖 وضعیت ربات تلگرام: ${db.data.system_settings.telegram_bot_token ? 'فعال' : 'تنظیم نشده (از پنل ارشد وارد کنید)'}`);
   console.log('==================================================');
 });

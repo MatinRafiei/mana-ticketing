@@ -19,7 +19,7 @@
       }
     };
   </script>
-  <link rel="stylesheet" href="./css/styles.css?v=2.5" />
+  <link rel="stylesheet" href="./css/styles.css?v=3.1" />
 </head>
 <body class="h-full font-sans antialiased bg-slate-950 text-slate-100 flex flex-col">
 
@@ -33,7 +33,7 @@
           <img src="./icons/company_logo.png" alt="لوگو" class="w-full h-full object-contain" />
         </div>
         <h1 class="text-xl font-black text-white">ورود به پنل مدیریت ارشد سرور</h1>
-        <p class="text-xs text-slate-400">کنترل سطح دسترسی، لاگ‌های امنیتی و کاربران</p>
+        <p class="text-xs text-slate-400">کنترل سطح دسترسی، ربات تلگرام، لاگ‌ها و امنیت</p>
       </div>
 
       <div id="login-error-alert" class="hidden p-3 rounded-xl bg-rose-950/50 border border-rose-800 text-rose-300 text-xs"></div>
@@ -78,7 +78,7 @@
               <h2 class="font-black text-sm sm:text-base text-white">مدیریت ارشد سرور مانا</h2>
               <span class="px-2 py-0.5 rounded-md bg-rose-950/80 text-rose-400 border border-rose-800 text-[10px] font-bold">Super Admin</span>
             </div>
-            <p class="text-[11px] text-slate-400">کنترل لینوکس، لاگ‌های ورود و امنیت</p>
+            <p class="text-[11px] text-slate-400">کنترل لینوکس، ربات تلگرام و امنیت</p>
           </div>
         </div>
 
@@ -114,9 +114,9 @@
         </div>
 
         <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-1">
-          <span class="text-[11px] text-slate-400 block">کاربران فعال / مسدود</span>
-          <div id="metric-users" class="text-sm sm:text-base font-bold text-white">0</div>
-          <span id="metric-users-detail" class="text-[10px] text-slate-500 block">0 کاربر مسدود</span>
+          <span class="text-[11px] text-slate-400 block">کاربران متصل به تلگرام</span>
+          <div id="metric-telegram" class="text-sm sm:text-base font-bold text-sky-400">0</div>
+          <span id="metric-telegram-detail" class="text-[10px] text-slate-500 block">دریافت پیام و هندشیک</span>
         </div>
 
         <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-1">
@@ -131,8 +131,14 @@
         <button class="nav-tab-btn px-4 py-2 text-xs font-bold rounded-xl transition bg-blue-600 text-white shadow" data-tab="users">
           پرسنل و حساب‌ها
         </button>
+        <button class="nav-tab-btn px-4 py-2 text-xs font-bold rounded-xl transition text-slate-400 hover:text-white" data-tab="telegram">
+          تنظیمات ربات تلگرام
+        </button>
+        <button class="nav-tab-btn px-4 py-2 text-xs font-bold rounded-xl transition text-slate-400 hover:text-white" data-tab="deliveries">
+          پایش تحویل و تاییدیه پیام‌ها
+        </button>
         <button class="nav-tab-btn px-4 py-2 text-xs font-bold rounded-xl transition text-slate-400 hover:text-white" data-tab="logs">
-          لاگ‌های ورود و نشست‌ها
+          لاگ‌های ورود و امنیت
         </button>
         <button class="nav-tab-btn px-4 py-2 text-xs font-bold rounded-xl transition text-slate-400 hover:text-white" data-tab="roles">
           نقش‌ها و دسترسی‌ها
@@ -147,7 +153,7 @@
         <div class="flex items-center justify-between flex-wrap gap-2">
           <div>
             <h3 class="font-bold text-sm sm:text-base text-white">مدیریت پرسنل و دسترسی ورود</h3>
-            <p class="text-xs text-slate-400">تعریف ایمیل (Gmail)، کلمه عبور و مسدودسازی آنی کاربران</p>
+            <p class="text-xs text-slate-400">تعریف ایمیل (Gmail)، کلمه عبور، مسدودسازی آنی و وضعیت اتصال تلگرام</p>
           </div>
           <button id="btn-show-add-user" class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md shadow-blue-500/20 transition flex items-center gap-1.5">
             + تعریف همکار جدید
@@ -200,6 +206,7 @@
                   <th class="py-3 px-4">ایمیل (شناسه ورود)</th>
                   <th class="py-3 px-4">واحد</th>
                   <th class="py-3 px-4">نقش</th>
+                  <th class="py-3 px-4">ربات تلگرام</th>
                   <th class="py-3 px-4 text-center">وضعیت دسترسی</th>
                   <th class="py-3 px-4 text-center">عملیات</th>
                 </tr>
@@ -212,7 +219,93 @@
         </div>
       </section>
 
-      <!-- ================= TAB 2: AUDIT LOGS ================= -->
+      <!-- ================= TAB 2: TELEGRAM BOT SETTINGS ================= -->
+      <section id="tab-sec-telegram" class="hidden space-y-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 space-y-5">
+          <div class="border-b border-slate-800 pb-3 flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <h3 class="font-bold text-sm sm:text-base text-white flex items-center gap-2">
+                <span>✈️ پیکربندی ربات تلگرام و پروکسی سرور ایران</span>
+              </h3>
+              <p class="text-xs text-slate-400">اتصال ربات برای ارسال اعلان‌ها با دکمه تاییدیه (Handshake) و یادآوری خودکار</p>
+            </div>
+            <button id="btn-test-telegram" class="px-3.5 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold transition flex items-center gap-1 shadow-sm">
+              <span>تست اتصال به تلگرام</span>
+            </button>
+          </div>
+
+          <div id="telegram-test-result" class="hidden p-3 rounded-xl text-xs"></div>
+
+          <form id="form-telegram-settings" class="space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-bold text-slate-300 mb-1">توکن ربات تلگرام (Bot Token) <span class="text-rose-500">*</span></label>
+                <input type="text" id="tg-token" placeholder="123456789:ABCdefGhIJKlmNoPQRstuVWXyz" class="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white font-mono focus:ring-2 focus:ring-sky-500" />
+                <span class="text-[10px] text-slate-500 mt-1 block">توکن دریافتی از @BotFather</span>
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-slate-300 mb-1">آدرس پروکسی سرور (اختیاری برای سرور ایران)</label>
+                <input type="text" id="tg-proxy" placeholder="http://127.0.0.1:10809 یا socks5://127.0.0.1:10808" class="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white font-mono focus:ring-2 focus:ring-sky-500" />
+                <span class="text-[10px] text-slate-500 mt-1 block">پورت لوکال V2Ray یا پروکسی HTTP / SOCKS5 روی سرور</span>
+              </div>
+            </div>
+
+            <!-- Auto-Resend Interval Settings -->
+            <div class="p-4 bg-slate-800/40 rounded-2xl border border-slate-800 space-y-3">
+              <div class="flex items-center justify-between">
+                <div>
+                  <h4 class="text-xs font-bold text-white">زمان‌بندی ارسال مجدد خودکار در صورت عدم تایید (Auto-Resend)</h4>
+                  <p class="text-[11px] text-slate-400">اگر کاربر دکمه «مشاهده شد» را نزند، سیستم به صورت دوره‌ای پیام را تکرار می‌کند.</p>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" id="tg-auto-resend" class="sr-only peer" checked />
+                  <div class="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-sky-600"></div>
+                </label>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                <div>
+                  <label class="block text-[11px] font-bold text-slate-300 mb-1">فاصله زمانی ارسال مجدد (دقیقه)</label>
+                  <input type="number" id="tg-interval" min="1" max="1440" value="30" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white font-mono" />
+                </div>
+                <div>
+                  <label class="block text-[11px] font-bold text-slate-300 mb-1">حداکثر دفعات یادآوری مجدد</label>
+                  <input type="number" id="tg-max-resends" min="1" max="10" value="3" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white font-mono" />
+                </div>
+              </div>
+            </div>
+
+            <div class="flex justify-end pt-2">
+              <button type="submit" id="btn-save-tg" class="px-5 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold transition shadow-md shadow-sky-500/20">
+                ذخیره تنظیمات ربات تلگرام
+              </button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <!-- ================= TAB 3: DELIVERIES & HANDSHAKE TRACKING ================= -->
+      <section id="tab-sec-deliveries" class="hidden space-y-4">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+          <div>
+            <h3 class="font-bold text-sm sm:text-base text-white flex items-center gap-2">
+              <span>✈️ داشبورد پایش وضعیت رویت و تاییدیه پیام‌ها</span>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800">هندشیک زنده</span>
+            </h3>
+            <p class="text-xs text-slate-400">پایش اینکه کدام همکاران پیام تلگرام را لمس و تایید کرده‌اند و کدام در انتظار یادآوری هستند</p>
+          </div>
+          <button id="btn-refresh-deliveries" class="px-3.5 py-1.5 rounded-xl border border-slate-700 hover:bg-slate-800 text-xs font-bold text-slate-300 transition">
+            بروزرسانی داده‌ها
+          </button>
+        </div>
+
+        <div id="deliveries-container" class="space-y-3">
+          <!-- Populated by JS -->
+        </div>
+      </section>
+
+      <!-- ================= TAB 4: AUDIT LOGS ================= -->
       <section id="tab-sec-logs" class="hidden space-y-4">
         <div class="flex items-center justify-between flex-wrap gap-2">
           <div>
@@ -246,12 +339,12 @@
         </div>
       </section>
 
-      <!-- ================= TAB 3: ROLES ================= -->
+      <!-- ================= TAB 5: ROLES ================= -->
       <section id="tab-sec-roles" class="hidden space-y-4">
         <div class="flex items-center justify-between">
           <div>
             <h3 class="font-bold text-sm sm:text-base text-white">نقش‌ها و مجوزهای سازمانی</h3>
-            <p class="text-xs text-slate-400">سطوح دسترسی به تیکت‌ها و ارجاعات</p>
+            <p class="text-xs text-slate-400">سطوح دسترسی به تیکت‌ها، اعلانات و ارجاعات</p>
           </div>
         </div>
         <div id="roles-grid" class="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
@@ -259,32 +352,38 @@
         </div>
       </section>
 
-      <!-- ================= TAB 4: SYSTEM & RESET ================= -->
-      <section id="tab-sec-system" class="hidden space-y-6">
-        <div class="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 space-y-4">
-          <h3 class="font-bold text-sm sm:text-base text-white">مشخصات فنی سرور لینوکس</h3>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-            <div class="p-3 bg-slate-800/60 rounded-xl border border-slate-700/60 space-y-1">
-              <span class="text-slate-400 block text-[11px]">سرویس پوش‌نوتیفیکیشن (VAPID):</span>
-              <span class="font-bold text-emerald-400">فعال و آماده ارسال به گوشی‌های خاموش</span>
+      <!-- ================= TAB 6: SYSTEM & RESET ================= -->
+      <section id="tab-sec-system" class="hidden space-y-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4">
+          <div>
+            <h3 class="font-bold text-sm sm:text-base text-white">اطلاعات محیط سرور</h3>
+            <p class="text-xs text-slate-400">مشخصات لینوکس و پایگاه داده محلی</p>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+            <div class="bg-slate-800/50 p-3.5 rounded-xl border border-slate-700/60">
+              <span class="text-slate-400 block mb-1">مسیر دیتابیس</span>
+              <span class="font-mono text-slate-200">/data/ticketing_db.json</span>
             </div>
-            <div class="p-3 bg-slate-800/60 rounded-xl border border-slate-700/60 space-y-1">
-              <span class="text-slate-400 block text-[11px]">پایگاه‌داده اختصاصی:</span>
-              <span class="font-mono text-slate-200">data/ticketing_db.json (محلی و بدون وابستگی)</span>
+            <div class="bg-slate-800/50 p-3.5 rounded-xl border border-slate-700/60">
+              <span class="text-slate-400 block mb-1">نسخه موتور اجرایی</span>
+              <span class="font-mono text-slate-200" id="sys-node-version">Node.js LTS</span>
+            </div>
+            <div class="bg-slate-800/50 p-3.5 rounded-xl border border-slate-700/60">
+              <span class="text-slate-400 block mb-1">وب‌پوش VAPID</span>
+              <span class="text-emerald-400 font-bold" id="sys-vapid-status">کلیدها فعال است</span>
             </div>
           </div>
         </div>
 
-        <!-- Danger Zone -->
-        <div class="bg-rose-950/20 border-2 border-rose-900/60 rounded-3xl p-5 sm:p-6 space-y-3">
-          <div class="flex items-center gap-2 text-rose-400 font-bold text-sm">
-            <span>منطقه حساس و بحرانی (Danger Zone)</span>
+        <div class="bg-rose-950/20 border border-rose-900/40 rounded-3xl p-6 space-y-3">
+          <div class="flex items-center gap-2 text-rose-400">
+            <h3 class="font-bold text-sm sm:text-base">منطقه خطر (Danger Zone) - بازنشانی به تنظیمات کارخانه</h3>
           </div>
-          <p class="text-xs text-rose-300 leading-relaxed">
-            بازنشانی کامل سرویس (Factory Reset) کلیه تیکت‌ها، لاگ‌ها و توکن‌های ورود را پاک کرده و سامانه را به وضعیت اولیه کارخانه بازمی‌گرداند.
+          <p class="text-xs text-slate-400 leading-relaxed">
+            با بازنشانی کارخانه، کلیه تیکت‌ها، فایل‌ها، اعلانات و لاگ‌ها پاک شده و سامانه به نقطه صفر بازمی‌گردد.
           </p>
-          <button id="btn-show-factory-reset" class="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition shadow-md shadow-rose-600/30">
-            بازنشانی کارخانه سرور (Factory Reset)
+          <button id="btn-open-factory-reset" class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition">
+            بازنشانی کامل سامانه (Reset Factory)
           </button>
         </div>
       </section>
@@ -292,34 +391,6 @@
     </main>
   </div>
 
-  <!-- Reset Password Modal for a User -->
-  <div id="modal-reset-user-pwd" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-    <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-sm w-full space-y-4">
-      <h4 class="font-bold text-sm text-white">تغییر رمز عبور همکار</h4>
-      <p id="reset-pwd-target-user" class="text-xs text-slate-400"></p>
-      <input type="text" id="reset-pwd-new-val" placeholder="رمز عبور جدید..." class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white font-mono" />
-      <div class="flex items-center justify-end gap-2 pt-2">
-        <button id="btn-cancel-reset-pwd" class="px-3.5 py-1.5 text-xs text-slate-400 hover:text-white">انصراف</button>
-        <button id="btn-submit-reset-pwd" class="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold">ذخیره رمز جدید</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Change Master Superadmin Password Modal -->
-  <div id="modal-change-superadmin-pwd" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-    <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-sm w-full space-y-4">
-      <h4 class="font-bold text-sm text-white">تغییر رمز عبور مدیر ارشد سرور</h4>
-      <div class="space-y-2">
-        <input type="password" id="input-curr-superadmin-pwd" placeholder="رمز عبور فعلی..." class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white font-mono" />
-        <input type="password" id="input-new-superadmin-pwd" placeholder="رمز عبور جدید (حداقل ۶ کاراکتر)..." class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white font-mono" />
-      </div>
-      <div class="flex items-center justify-end gap-2 pt-2">
-        <button id="btn-cancel-superadmin-pwd" class="px-3.5 py-1.5 text-xs text-slate-400 hover:text-white">انصراف</button>
-        <button id="btn-submit-superadmin-pwd" class="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold">تغییر رمز</button>
-      </div>
-    </div>
-  </div>
-
-  <script src="./js/superadmin.js"></script>
+  <script src="./js/superadmin.js?v=3.1"></script>
 </body>
 </html>

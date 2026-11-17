@@ -1,12 +1,11 @@
-// Client logic for Superadmin Control Panel
+// Client logic for Superadmin Control Panel with Telegram Integration & Delivery Tracking
 
 const API_BASE = window.location.origin;
 let authToken = localStorage.getItem('mana_superadmin_token') || '';
 let currentUsers = [];
 let currentRoles = [];
-let activeUserIdForPwd = null;
+let currentDeliveries = [];
 
-// Helpers
 function authHeaders() {
   return {
     'Content-Type': 'application/json',
@@ -77,6 +76,8 @@ async function loadDashboardData() {
   await Promise.all([
     fetchStatus(),
     fetchUsers(),
+    fetchTelegramSettings(),
+    fetchDeliveries(),
     fetchLogs(),
     fetchRoles()
   ]);
@@ -98,78 +99,76 @@ function renderMetrics(data) {
   document.getElementById('metric-uptime').textContent = data.serverUptime || 'آنلاین';
   document.getElementById('metric-memory').textContent = `${data.memory?.percent || 0}٪`;
   document.getElementById('metric-memory-detail').textContent = `${data.memory?.usedMb || 0} / ${data.memory?.totalMb || 0} مگابایت`;
-  document.getElementById('metric-users').textContent = data.counts?.users || 0;
-  document.getElementById('metric-users-detail').textContent = `${data.counts?.restrictedUsers || 0} کاربر مسدود`;
+
+  document.getElementById('metric-telegram').textContent = data.counts?.telegramLinkedUsers || 0;
+  document.getElementById('metric-telegram-detail').textContent = `${data.counts?.deliveries || 0} گردش پیام با هندشیک`;
+
   document.getElementById('metric-push').textContent = data.counts?.pushSubscriptions || 0;
 }
 
-// -------------------------------------------------------------
-// Users Management
-// -------------------------------------------------------------
+// Users
 async function fetchUsers() {
   try {
     const res = await fetch(`${API_BASE}/api/superadmin/users`, { headers: authHeaders() });
     if (res.ok) {
       currentUsers = await res.json();
-      renderUsersTable();
+      renderUsersTable(currentUsers);
     }
   } catch (e) {
     console.warn('Error fetching users:', e);
   }
 }
 
-function renderUsersTable() {
+function renderUsersTable(users) {
   const tbody = document.getElementById('users-table-body');
   if (!tbody) return;
 
-  if (currentUsers.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-slate-500">هیچ کاربری تعریف نشده است.</td></tr>';
+  if (users.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" class="py-6 text-center text-slate-500">هیچ کاربری یافت نشد.</td></tr>`;
     return;
   }
 
-  tbody.innerHTML = currentUsers.map(u => {
-    const roleName = currentRoles.find(r => r.id === u.roleId)?.name || u.roleId || 'پرسنل';
-    const isBlocked = u.isRestricted;
+  tbody.innerHTML = users.map(u => {
+    const roleObj = currentRoles.find(r => r.id === u.roleId);
+    const roleName = roleObj ? roleObj.name : u.roleId;
 
     return `
       <tr class="hover:bg-slate-800/40 transition">
-        <td class="py-3 px-4">
-          <div class="flex items-center gap-2">
-            <img src="${u.avatar || './icons/company_logo.png'}" class="w-7 h-7 rounded-full object-cover border border-slate-700" />
-            <div>
-              <span class="font-bold text-white block">${u.name}</span>
-              <span class="text-[10px] text-slate-500 font-mono">${u.initials || ''}</span>
-            </div>
-          </div>
+        <td class="py-3 px-4 font-bold text-white flex items-center gap-2">
+          <img src="${u.avatar || './icons/company_logo.png'}" class="w-7 h-7 rounded-full object-cover" />
+          <span>${u.name}</span>
         </td>
         <td class="py-3 px-4 font-mono text-slate-300">${u.email}</td>
-        <td class="py-3 px-4 text-slate-400">${u.department || '—'}</td>
+        <td class="py-3 px-4 text-slate-400">${u.department || 'عمومی'}</td>
         <td class="py-3 px-4">
-          <span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-950/80 text-blue-300 border border-blue-800">
+          <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-950 text-blue-300 border border-blue-800">
             ${roleName}
           </span>
         </td>
-        <td class="py-3 px-4 text-center">
-          ${isBlocked ? `
-            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-950 text-rose-400 border border-rose-800">
-              مسدود شده
+        <td class="py-3 px-4">
+          ${u.telegramChatId ? `
+            <span class="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400">
+              <span>✈️ متصل</span>
+              <button class="btn-unlink-user-tg text-slate-500 hover:text-rose-400 text-[10px]" data-id="${u.id}" title="قطع اتصال">(قطع)</button>
             </span>
           ` : `
-            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800">
-              فعال و مجاز
-            </span>
+            <span class="text-slate-500 text-[10px]">کد: <code class="font-mono text-sky-400 font-bold">${u.telegramAuthCode || '-'}</code></span>
           `}
         </td>
         <td class="py-3 px-4 text-center">
-          <div class="flex items-center justify-center gap-1.5 flex-wrap">
-            <button class="btn-toggle-restrict px-2 py-1 rounded-lg text-[11px] font-bold transition ${isBlocked ? 'bg-emerald-600/20 text-emerald-300 hover:bg-emerald-600/30 border border-emerald-800' : 'bg-amber-600/20 text-amber-300 hover:bg-amber-600/30 border border-amber-800'}" data-id="${u.id}" data-restricted="${isBlocked ? 'true' : 'false'}">
-              ${isBlocked ? 'رفع مسدودیت' : 'محدودسازی'}
-            </button>
-            <button class="btn-open-pwd px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] border border-slate-700" data-id="${u.id}" data-name="${u.name}">
-              تغییر رمز
+          ${u.isRestricted ? `
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-950 text-rose-400 border border-rose-800">مسدود شده</span>
+          ` : `
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800">فعال</span>
+          `}
+        </td>
+        <td class="py-3 px-4 text-center">
+          <div class="flex items-center justify-center gap-1.5">
+            <button class="btn-toggle-restrict px-2 py-1 rounded-lg text-[10px] font-bold ${u.isRestricted ? 'bg-emerald-600/20 text-emerald-300 border border-emerald-700 hover:bg-emerald-600/30' : 'bg-amber-600/20 text-amber-300 border border-amber-700 hover:bg-amber-600/30'}" data-id="${u.id}">
+              ${u.isRestricted ? 'رفع مسدودی' : 'مسدودسازی'}
             </button>
             <button class="btn-del-user p-1 text-slate-500 hover:text-rose-400 rounded-lg transition" data-id="${u.id}" data-name="${u.name}" title="حذف کاربر">
-              حذف
+              🗑
             </button>
           </div>
         </td>
@@ -177,69 +176,177 @@ function renderUsersTable() {
     `;
   }).join('');
 
-  bindUserRowActions();
-}
-
-function bindUserRowActions() {
+  // Bind restrict buttons
   document.querySelectorAll('.btn-toggle-restrict').forEach(btn => {
     btn.addEventListener('click', async () => {
       const id = btn.getAttribute('data-id');
-      const wasRestricted = btn.getAttribute('data-restricted') === 'true';
-      const actionTitle = wasRestricted ? 'رفع مسدودیت' : 'مسدودسازی';
-
-      if (confirm(`آیا از ${actionTitle} این کاربر اطمینان دارید؟`)) {
+      btn.disabled = true;
+      try {
         const res = await fetch(`${API_BASE}/api/superadmin/users/${id}/restrict`, {
           method: 'PUT',
-          headers: authHeaders(),
-          body: JSON.stringify({ isRestricted: !wasRestricted })
-        });
-        if (res.ok) {
-          fetchUsers();
-          fetchStatus();
-        } else {
-          alert('خطا در اعمال تغییرات');
-        }
-      }
-    });
-  });
-
-  document.querySelectorAll('.btn-open-pwd').forEach(btn => {
-    btn.addEventListener('click', () => {
-      activeUserIdForPwd = btn.getAttribute('data-id');
-      const userName = btn.getAttribute('data-name');
-      document.getElementById('reset-pwd-target-user').textContent = `کاربر: ${userName}`;
-      document.getElementById('reset-pwd-new-val').value = '';
-      document.getElementById('modal-reset-user-pwd').classList.remove('hidden');
-    });
-  });
-
-  document.querySelectorAll('.btn-del-user').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const id = btn.getAttribute('data-id');
-      const name = btn.getAttribute('data-name');
-      if (confirm(`آیا از حذف کامل «${name}» از سرور اطمینان دارید؟`)) {
-        const res = await fetch(`${API_BASE}/api/superadmin/users/${id}`, {
-          method: 'DELETE',
           headers: authHeaders()
         });
         if (res.ok) {
           fetchUsers();
           fetchStatus();
+        }
+      } catch (e) {
+        alert('خطا در تغییر وضعیت دسترسی');
+      }
+    });
+  });
+
+  // Bind unlink tg buttons
+  document.querySelectorAll('.btn-unlink-user-tg').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.getAttribute('data-id');
+      if (confirm('آیا از قطع اتصال تلگرام این کاربر اطمینان دارید؟')) {
+        await fetch(`${API_BASE}/api/superadmin/users/${id}/telegram`, {
+          method: 'DELETE',
+          headers: authHeaders()
+        });
+        fetchUsers();
+        fetchStatus();
+      }
+    });
+  });
+
+  // Bind delete buttons
+  document.querySelectorAll('.btn-del-user').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.getAttribute('data-id');
+      const name = btn.getAttribute('data-name');
+      if (confirm(`آیا مطمئن هستید که می‌خواهید کاربر «${name}» را حذف نمایید؟`)) {
+        const res = await fetch(`${API_BASE}/api/superadmin/users/${id}`, {
+          method: 'DELETE',
+          headers: authHeaders()
+        });
+        const data = await res.json();
+        if (res.ok) {
+          fetchUsers();
+          fetchStatus();
         } else {
-          const err = await res.json();
-          alert(err.error || 'خطا در حذف کاربر');
+          alert(data.error || 'خطا در حذف کاربر');
         }
       }
     });
   });
 }
 
-// -------------------------------------------------------------
-// Login Audit Logs
-// -------------------------------------------------------------
+// Telegram Settings
+async function fetchTelegramSettings() {
+  try {
+    const res = await fetch(`${API_BASE}/api/superadmin/telegram/settings`, { headers: authHeaders() });
+    if (res.ok) {
+      const s = await res.json();
+      document.getElementById('tg-token').value = s.botToken || '';
+      document.getElementById('tg-proxy').value = s.proxyUrl || '';
+      document.getElementById('tg-auto-resend').checked = s.autoResendEnabled;
+      document.getElementById('tg-interval').value = s.resendIntervalMins || 30;
+      document.getElementById('tg-max-resends').value = s.maxResends || 3;
+    }
+  } catch (e) {
+    console.warn('Error fetching telegram settings:', e);
+  }
+}
+
+// Deliveries Tracking
+async function fetchDeliveries() {
+  try {
+    const res = await fetch(`${API_BASE}/api/superadmin/deliveries`, { headers: authHeaders() });
+    if (res.ok) {
+      currentDeliveries = await res.json();
+      renderDeliveries(currentDeliveries);
+    }
+  } catch (e) {
+    console.warn('Error fetching deliveries:', e);
+  }
+}
+
+function renderDeliveries(deliveries) {
+  const container = document.getElementById('deliveries-container');
+  if (!container) return;
+
+  if (deliveries.length === 0) {
+    container.innerHTML = `
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center text-slate-500 text-xs">
+        هنوز پیامی ارسال نشده است.
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = deliveries.map(group => `
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-3">
+      <div class="flex items-start justify-between flex-wrap gap-2">
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="px-2 py-0.5 rounded text-[10px] font-bold ${group.type === 'announcement' ? 'bg-amber-950 text-amber-300 border border-amber-800' : 'bg-blue-950 text-blue-300 border border-blue-800'}">
+              ${group.type === 'announcement' ? 'بخشنامه سازمانی' : 'تیکت'}
+            </span>
+            <h4 class="font-bold text-xs sm:text-sm text-white">${group.title}</h4>
+          </div>
+          <p class="text-xs text-slate-400 mt-1 line-clamp-2">${group.message}</p>
+        </div>
+        <span class="text-[10px] text-slate-500 font-mono">${formatJalaliTime(group.createdAt)}</span>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 pt-2 border-t border-slate-800/80">
+        ${group.recipients.map(r => `
+          <div class="p-2.5 rounded-xl border flex items-center justify-between gap-2 ${r.status === 'acknowledged' ? 'bg-emerald-950/30 border-emerald-800/60' : 'bg-amber-950/20 border-amber-800/40'}">
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-1.5">
+                <span class="font-bold text-xs text-white truncate">${r.userName}</span>
+                ${r.telegramChatId ? '<span class="text-[10px] text-sky-400">✈️</span>' : '<span class="text-[9px] text-slate-500">(فاقد تلگرام)</span>'}
+              </div>
+              <div class="text-[10px] ${r.status === 'acknowledged' ? 'text-emerald-400 font-bold' : 'text-amber-400'}">
+                ${r.status === 'acknowledged' ? `✅ تایید شد: ${formatJalaliTime(r.acknowledgedAt)}` : `⏳ در انتظار تایید (${r.resendCount || 0} بار یادآوری)`}
+              </div>
+            </div>
+
+            ${r.status !== 'acknowledged' && r.telegramChatId ? `
+              <button class="btn-resend-superadmin px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-400 border border-sky-800/50 text-[10px] font-bold transition shrink-0" data-del-id="${group.id}" data-user-id="${r.userId}">
+                یادآوری فوری
+              </button>
+            ` : ''}
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `).join('');
+
+  document.querySelectorAll('.btn-resend-superadmin').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const delId = btn.getAttribute('data-del-id');
+      const userId = btn.getAttribute('data-user-id');
+      btn.disabled = true;
+      btn.textContent = '...';
+      try {
+        const res = await fetch(`${API_BASE}/api/superadmin/deliveries/${delId}/resend/${userId}`, {
+          method: 'POST',
+          headers: authHeaders()
+        });
+        const data = await res.json();
+        if (res.ok) {
+          alert('یادآوری مجدد در تلگرام ارسال گردید.');
+          fetchDeliveries();
+        } else {
+          alert(data.error || 'خطا در ارسال');
+        }
+      } catch (e) {
+        alert('خطا در ارتباط با سرور');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'یادآوری فوری';
+      }
+    });
+  });
+}
+
+// Audit Logs
 async function fetchLogs() {
   try {
-    const res = await fetch(`${API_BASE}/api/superadmin/logs?limit=150`, { headers: authHeaders() });
+    const res = await fetch(`${API_BASE}/api/superadmin/logs?limit=100`, { headers: authHeaders() });
     if (res.ok) {
       const logs = await res.json();
       renderLogsTable(logs);
@@ -254,77 +361,72 @@ function renderLogsTable(logs) {
   if (!tbody) return;
 
   if (logs.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" class="p-6 text-center text-slate-500">هیچ لاگی ثبت نشده است.</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="7" class="py-6 text-center text-slate-500">هیچ لاگی ثبت نشده است.</td></tr>`;
     return;
   }
 
   tbody.innerHTML = logs.map(l => {
-    let statusBadge = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800">موفق</span>';
-    if (l.status === 'FAILED') {
-      statusBadge = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-950 text-rose-400 border border-rose-800">ناموفق</span>';
-    } else if (l.status === 'BLOCKED') {
-      statusBadge = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-950 text-amber-400 border border-amber-800">مسدود</span>';
+    let statusBadge = '';
+    if (l.status === 'SUCCESS') {
+      statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800">موفق</span>`;
+    } else if (l.status === 'FAILED') {
+      statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-950 text-rose-400 border border-rose-800">ناموفق</span>`;
+    } else {
+      statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-400 border border-amber-800">مسدود</span>`;
     }
 
     return `
-      <tr class="hover:bg-slate-800/40 text-[11px] transition">
-        <td class="py-2.5 px-4 text-slate-400 font-sans">${formatJalaliTime(l.timestamp)}</td>
-        <td class="py-2.5 px-4 font-bold text-white">${l.email || '—'}</td>
-        <td class="py-2.5 px-4 text-slate-300">${l.ip || '—'}</td>
-        <td class="py-2.5 px-4">
-          <span class="text-[10px] ${l.type === 'SUPERADMIN' ? 'text-amber-400 font-bold' : 'text-slate-400'}">
-            ${l.type === 'SUPERADMIN' ? 'مدیر ارشد' : 'کاربر عادی'}
-          </span>
-        </td>
+      <tr class="hover:bg-slate-800/40 transition text-[11px]">
+        <td class="py-2.5 px-4 text-slate-400">${formatJalaliTime(l.timestamp)}</td>
+        <td class="py-2.5 px-4 font-bold text-white">${l.email}</td>
+        <td class="py-2.5 px-4 text-slate-300 font-mono">${l.ip}</td>
+        <td class="py-2.5 px-4 text-slate-400">${l.type || 'USER'}</td>
         <td class="py-2.5 px-4 text-center">${statusBadge}</td>
-        <td class="py-2.5 px-4 text-slate-400 truncate max-w-[200px]" title="${l.userAgent}">${l.userAgent || '—'}</td>
-        <td class="py-2.5 px-4 text-slate-400 font-sans">${l.message || '—'}</td>
+        <td class="py-2.5 px-4 text-slate-400 truncate max-w-xs" title="${l.userAgent}">${(l.userAgent || '').slice(0, 40)}</td>
+        <td class="py-2.5 px-4 text-slate-300">${l.message || '-'}</td>
       </tr>
     `;
   }).join('');
 }
 
-// -------------------------------------------------------------
 // Roles
-// -------------------------------------------------------------
 async function fetchRoles() {
   try {
     const res = await fetch(`${API_BASE}/api/superadmin/roles`, { headers: authHeaders() });
     if (res.ok) {
       currentRoles = await res.json();
-      renderRolesGrid();
-      populateRoleSelect();
+      renderRoles(currentRoles);
+      populateRoleSelect(currentRoles);
     }
   } catch (e) {
     console.warn('Error fetching roles:', e);
   }
 }
 
-function renderRolesGrid() {
+function populateRoleSelect(roles) {
+  const sel = document.getElementById('new-user-role');
+  if (sel) {
+    sel.innerHTML = roles.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
+  }
+}
+
+function renderRoles(roles) {
   const grid = document.getElementById('roles-grid');
   if (!grid) return;
 
-  grid.innerHTML = currentRoles.map(r => `
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-2">
+  grid.innerHTML = roles.map(r => `
+    <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-2">
       <div class="flex items-center justify-between">
         <h4 class="font-bold text-sm text-white">${r.name}</h4>
-        <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-800 text-slate-400">${r.id}</span>
+        ${r.isSystem ? '<span class="text-[10px] text-slate-500 bg-slate-800 px-2 py-0.5 rounded">سیستمی</span>' : ''}
       </div>
-      <p class="text-xs text-slate-400">${r.description || 'بدون توضیحات'}</p>
-      <div class="pt-2 border-t border-slate-800 flex flex-wrap gap-1">
+      <p class="text-xs text-slate-400">${r.description || 'بدون شرح'}</p>
+      <div class="flex flex-wrap gap-1 pt-2">
         ${(r.permissions || []).map(p => `
-          <span class="text-[10px] bg-slate-800 px-2 py-0.5 rounded text-slate-300 font-mono">${p}</span>
+          <span class="px-2 py-0.5 bg-slate-800 text-slate-300 rounded text-[10px] font-mono">${p}</span>
         `).join('')}
       </div>
     </div>
-  `).join('');
-}
-
-function populateRoleSelect() {
-  const sel = document.getElementById('new-user-role');
-  if (!sel) return;
-  sel.innerHTML = currentRoles.map(r => `
-    <option value="${r.id}">${r.name}</option>
   `).join('');
 }
 
@@ -334,13 +436,18 @@ function populateRoleSelect() {
 document.addEventListener('DOMContentLoaded', () => {
   init();
 
-  // Superadmin Login Form
-  document.getElementById('superadmin-login-form')?.addEventListener('submit', async (e) => {
+  // Login Form
+  const loginForm = document.getElementById('superadmin-login-form');
+  loginForm?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const username = document.getElementById('login-username').value.trim();
     const password = document.getElementById('login-password').value;
-    const alertEl = document.getElementById('login-error-alert');
-    alertEl.classList.add('hidden');
+    const errBox = document.getElementById('login-error-alert');
+    const submitBtn = document.getElementById('btn-login-submit');
+
+    errBox.classList.add('hidden');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'در حال بررسی...';
 
     try {
       const res = await fetch(`${API_BASE}/api/superadmin/login`, {
@@ -349,18 +456,20 @@ document.addEventListener('DOMContentLoaded', () => {
         body: JSON.stringify({ username, password })
       });
       const data = await res.json();
-      if (!res.ok) {
-        alertEl.textContent = data.error || 'خطا در ورود';
-        alertEl.classList.remove('hidden');
-        return;
+      if (res.ok) {
+        authToken = data.token;
+        localStorage.setItem('mana_superadmin_token', authToken);
+        showDashboard();
+      } else {
+        errBox.textContent = data.error || 'خطا در ورود';
+        errBox.classList.remove('hidden');
       }
-
-      authToken = data.token;
-      localStorage.setItem('mana_superadmin_token', authToken);
-      showDashboard();
     } catch (err) {
-      alertEl.textContent = 'خطا در ارتباط با سرور لینوکس: ' + err.message;
-      alertEl.classList.remove('hidden');
+      errBox.textContent = 'خطای ارتباط با سرور: ' + err.message;
+      errBox.classList.remove('hidden');
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'ورود امن به پنل سرور';
     }
   });
 
@@ -371,9 +480,11 @@ document.addEventListener('DOMContentLoaded', () => {
     showLogin();
   });
 
-  // Tab switching
+  // Sub-tabs navigation
   document.querySelectorAll('.nav-tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
+      const target = btn.getAttribute('data-tab');
+
       document.querySelectorAll('.nav-tab-btn').forEach(b => {
         b.classList.remove('bg-blue-600', 'text-white', 'shadow');
         b.classList.add('text-slate-400');
@@ -381,28 +492,94 @@ document.addEventListener('DOMContentLoaded', () => {
       btn.classList.add('bg-blue-600', 'text-white', 'shadow');
       btn.classList.remove('text-slate-400');
 
-      const tab = btn.getAttribute('data-tab');
-      ['users', 'logs', 'roles', 'system'].forEach(t => {
-        const sec = document.getElementById(`tab-sec-${t}`);
-        if (sec) sec.classList.toggle('hidden', t !== tab);
-      });
+      document.querySelectorAll('main > section').forEach(sec => sec.classList.add('hidden'));
+      const activeSec = document.getElementById(`tab-sec-${target}`);
+      if (activeSec) activeSec.classList.remove('hidden');
+
+      if (target === 'deliveries') fetchDeliveries();
+      if (target === 'logs') fetchLogs();
+      if (target === 'telegram') fetchTelegramSettings();
     });
   });
 
-  // Add User Box Toggle
-  document.getElementById('btn-show-add-user')?.addEventListener('click', () => {
-    document.getElementById('box-add-user').classList.toggle('hidden');
-  });
-  document.getElementById('btn-cancel-add-user')?.addEventListener('click', () => {
-    document.getElementById('box-add-user').classList.add('hidden');
+  // Save Telegram Settings
+  const tgForm = document.getElementById('form-telegram-settings');
+  tgForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const botToken = document.getElementById('tg-token').value.trim();
+    const proxyUrl = document.getElementById('tg-proxy').value.trim();
+    const autoResendEnabled = document.getElementById('tg-auto-resend').checked;
+    const resendIntervalMins = document.getElementById('tg-interval').value;
+    const maxResends = document.getElementById('tg-max-resends').value;
+
+    const saveBtn = document.getElementById('btn-save-tg');
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'در حال ذخیره...';
+
+    try {
+      const res = await fetch(`${API_BASE}/api/superadmin/telegram/settings`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ botToken, proxyUrl, autoResendEnabled, resendIntervalMins, maxResends })
+      });
+      if (res.ok) {
+        alert('تنظیمات ربات تلگرام با موفقیت ذخیره و فعال شد.');
+        fetchStatus();
+      } else {
+        alert('خطا در ذخیره تنظیمات');
+      }
+    } catch (err) {
+      alert('خطای ارتباط با سرور: ' + err.message);
+    } finally {
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'ذخیره تنظیمات ربات تلگرام';
+    }
   });
 
-  // Create User Form Submit
-  document.getElementById('form-create-user')?.addEventListener('submit', async (e) => {
+  // Test Telegram Bot Connection
+  document.getElementById('btn-test-telegram')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btn-test-telegram');
+    const resultBox = document.getElementById('telegram-test-result');
+    btn.disabled = true;
+    btn.textContent = 'در حال تست ارتباط...';
+    resultBox.classList.add('hidden');
+
+    try {
+      const res = await fetch(`${API_BASE}/api/superadmin/telegram/test`, {
+        method: 'POST',
+        headers: authHeaders()
+      });
+      const data = await res.json();
+      resultBox.classList.remove('hidden');
+
+      if (res.ok) {
+        resultBox.className = 'p-3 rounded-xl text-xs bg-emerald-950/60 border border-emerald-800 text-emerald-300';
+        resultBox.innerHTML = `✅ اتصال با موفقیت برقرار شد! نام ربات: <b>${data.bot.first_name}</b> (@${data.bot.username})`;
+      } else {
+        resultBox.className = 'p-3 rounded-xl text-xs bg-rose-950/60 border border-rose-800 text-rose-300';
+        resultBox.innerHTML = `❌ خطا در ارتباط با تلگرام: ${data.error}`;
+      }
+    } catch (err) {
+      resultBox.className = 'p-3 rounded-xl text-xs bg-rose-950/60 border border-rose-800 text-rose-300';
+      resultBox.innerHTML = `❌ خطای شبکه: ${err.message}`;
+      resultBox.classList.remove('hidden');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'تست اتصال به تلگرام';
+    }
+  });
+
+  // Refresh Deliveries & Logs
+  document.getElementById('btn-refresh-deliveries')?.addEventListener('click', () => fetchDeliveries());
+  document.getElementById('btn-refresh-logs')?.addEventListener('click', () => fetchLogs());
+
+  // Create User Form
+  const createUserForm = document.getElementById('form-create-user');
+  createUserForm?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const name = document.getElementById('new-user-name').value.trim();
     const email = document.getElementById('new-user-email').value.trim();
-    const password = document.getElementById('new-user-pwd').value.trim();
+    const password = document.getElementById('new-user-pwd').value;
     const department = document.getElementById('new-user-dept').value.trim();
     const roleId = document.getElementById('new-user-role').value;
 
@@ -413,103 +590,24 @@ document.addEventListener('DOMContentLoaded', () => {
         body: JSON.stringify({ name, email, password, department, roleId })
       });
       const data = await res.json();
-      if (!res.ok) {
-        alert(data.error || 'خطا در ثبت کاربر');
-        return;
-      }
-      document.getElementById('box-add-user').classList.add('hidden');
-      document.getElementById('form-create-user').reset();
-      fetchUsers();
-      fetchStatus();
-      alert(`کاربر ${name} با موفقیت افزوده شد.`);
-    } catch (err) {
-      alert('خطا در ارسال اطلاعات: ' + err.message);
-    }
-  });
-
-  // Reset User Password Modal
-  document.getElementById('btn-cancel-reset-pwd')?.addEventListener('click', () => {
-    document.getElementById('modal-reset-user-pwd').classList.add('hidden');
-    activeUserIdForPwd = null;
-  });
-
-  document.getElementById('btn-submit-reset-pwd')?.addEventListener('click', async () => {
-    const newPassword = document.getElementById('reset-pwd-new-val').value.trim();
-    if (!newPassword || newPassword.length < 6) {
-      alert('رمز عبور باید حداقل ۶ کاراکتر باشد.');
-      return;
-    }
-    if (!activeUserIdForPwd) return;
-
-    try {
-      const res = await fetch(`${API_BASE}/api/superadmin/users/${activeUserIdForPwd}`, {
-        method: 'PUT',
-        headers: authHeaders(),
-        body: JSON.stringify({ password: newPassword })
-      });
       if (res.ok) {
-        alert('رمز عبور کاربر با موفقیت بروزرسانی شد.');
-        document.getElementById('modal-reset-user-pwd').classList.add('hidden');
-        activeUserIdForPwd = null;
+        alert(`کاربر «${name}» با موفقیت تعریف شد.`);
+        document.getElementById('box-add-user').classList.add('hidden');
+        createUserForm.reset();
+        fetchUsers();
+        fetchStatus();
       } else {
-        const d = await res.json();
-        alert(d.error || 'خطا در تغییر رمز');
+        alert(data.error || 'خطا در ثبت کاربر');
       }
     } catch (err) {
-      alert(err.message);
+      alert('خطای ارتباط با سرور: ' + err.message);
     }
   });
 
-  // Superadmin Master Password Change Modal
-  document.getElementById('btn-open-pwd-modal')?.addEventListener('click', () => {
-    document.getElementById('modal-change-superadmin-pwd').classList.remove('hidden');
+  document.getElementById('btn-show-add-user')?.addEventListener('click', () => {
+    document.getElementById('box-add-user').classList.toggle('hidden');
   });
-  document.getElementById('btn-cancel-superadmin-pwd')?.addEventListener('click', () => {
-    document.getElementById('modal-change-superadmin-pwd').classList.add('hidden');
-  });
-  document.getElementById('btn-submit-superadmin-pwd')?.addEventListener('click', async () => {
-    const currentPassword = document.getElementById('input-curr-superadmin-pwd').value;
-    const newPassword = document.getElementById('input-new-superadmin-pwd').value;
-    if (!newPassword || newPassword.length < 6) {
-      alert('رمز عبور جدید باید حداقل ۶ کاراکتر باشد.');
-      return;
-    }
-
-    const res = await fetch(`${API_BASE}/api/superadmin/change-password`, {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify({ currentPassword, newPassword })
-    });
-    const d = await res.json();
-    if (res.ok) {
-      alert('رمز عبور مدیر ارشد با موفقیت تغییر کرد.');
-      document.getElementById('modal-change-superadmin-pwd').classList.add('hidden');
-    } else {
-      alert(d.error || 'خطا در تغییر رمز');
-    }
-  });
-
-  // Factory Reset
-  document.getElementById('btn-show-factory-reset')?.addEventListener('click', async () => {
-    const confirmPwd = prompt('جهت تایید بازنشانی کارخانه، رمز عبور مدیر ارشد سرور را وارد نمایید:');
-    if (!confirmPwd) return;
-
-    const res = await fetch(`${API_BASE}/api/superadmin/factory-reset`, {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify({ confirmPassword: confirmPwd })
-    });
-    const d = await res.json();
-    if (res.ok) {
-      alert('سامانه با موفقیت ریست کارخانه شد.');
-      loadDashboardData();
-    } else {
-      alert(d.error || 'خطا در بازنشانی');
-    }
-  });
-
-  // Refresh Logs
-  document.getElementById('btn-refresh-logs')?.addEventListener('click', () => {
-    fetchLogs();
+  document.getElementById('btn-cancel-add-user')?.addEventListener('click', () => {
+    document.getElementById('box-add-user').classList.add('hidden');
   });
 });

@@ -6,6 +6,7 @@ const path = require('path');
 const fs = require('fs');
 const db = require('../db');
 const pushService = require('../push');
+const telegramService = require('../telegram');
 const { getClientIp, getUserAgent, createToken, requireAuth } = require('../auth');
 
 // Multer storage for avatars & ticket attachments
@@ -28,7 +29,10 @@ const upload = multer({
 
 // Broadcast Helper (injected from server.js)
 let broadcastWs = () => {};
-router.setBroadcast = (fn) => { broadcastWs = fn; };
+router.setBroadcast = (fn) => {
+  broadcastWs = fn;
+  telegramService.setBroadcast(fn);
+};
 
 // ---------------------------------------------------------------------
 // Auth & Profile Endpoints
@@ -98,44 +102,37 @@ router.post('/auth/login', (req, res) => {
 });
 
 // Current User Profile
-router.get('/auth/me', requireAuth, (req, res) => {
+router.get('/profile', requireAuth, (req, res) => {
   const { password_hash, ...sanitized } = req.user;
   res.json(sanitized);
 });
 
-// Update Profile (Name, Department, Avatar, Password)
-router.put('/auth/profile', requireAuth, (req, res) => {
+// Update Profile (Name, Department, Password)
+router.put('/profile', requireAuth, (req, res) => {
   try {
-    const { name, department, avatar, currentPassword, newPassword } = req.body;
-    const user = db.findUserById(req.user.id);
-    if (!user) return res.status(404).json({ error: 'کاربر یافت نشد.' });
+    const { name, department, currentPassword, newPassword } = req.body;
+    const updates = {};
+
+    if (name) updates.name = name.trim();
+    if (department) updates.department = department.trim();
 
     if (newPassword) {
       if (!currentPassword) {
-        return res.status(400).json({ error: 'برای تغییر رمز عبور، وارد کردن رمز فعلی الزامی است.' });
+        return res.status(400).json({ error: 'جهت تغییر رمز عبور، وارد کردن رمز فعلی الزامی است.' });
       }
-      if (!bcrypt.compareSync(currentPassword, user.password_hash)) {
+      const isMatch = bcrypt.compareSync(currentPassword, req.user.password_hash);
+      if (!isMatch) {
         return res.status(400).json({ error: 'رمز عبور فعلی نادرست است.' });
       }
       if (newPassword.length < 6) {
         return res.status(400).json({ error: 'رمز عبور جدید باید حداقل ۶ کاراکتر باشد.' });
       }
-      const salt = bcrypt.genSaltSync(10);
-      user.password_hash = bcrypt.hashSync(newPassword, salt);
+      updates.password = newPassword;
     }
 
-    if (name) {
-      user.name = name.trim();
-      user.initials = user.name.split(' ').map(p => p[0]).join('‌');
-    }
-    if (department) user.department = department.trim();
-    if (avatar) user.avatar = avatar;
-
-    user.updatedAt = new Date().toISOString();
-    db.save();
-
-    broadcastWs({ type: 'USER_UPDATED', userId: user.id });
-    const { password_hash, ...sanitized } = user;
+    const updated = db.updateUser(req.user.id, updates);
+    const { password_hash, ...sanitized } = updated;
+    broadcastWs({ type: 'USER_UPDATED', user: sanitized });
     res.json(sanitized);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -143,46 +140,53 @@ router.put('/auth/profile', requireAuth, (req, res) => {
 });
 
 // Upload Avatar
-router.post('/upload/avatar', requireAuth, upload.single('avatar'), (req, res) => {
+router.post('/profile/avatar', requireAuth, upload.single('avatar'), (req, res) => {
   if (!req.file) {
-    return res.status(400).json({ error: 'هیچ فایلی ارسال نشده است.' });
+    return res.status(400).json({ error: 'فایل تصویری بارگذاری نشد.' });
   }
-  const fileUrl = `./uploads/${req.file.filename}`;
-  // Automatically update current user avatar
-  const user = db.findUserById(req.user.id);
-  if (user) {
-    user.avatar = fileUrl;
-    user.updatedAt = new Date().toISOString();
-    db.save();
-    broadcastWs({ type: 'USER_UPDATED', userId: user.id });
-  }
-  res.json({ url: fileUrl });
+
+  const avatarUrl = `/uploads/${req.file.filename}`;
+  const updated = db.updateUser(req.user.id, { avatar: avatarUrl });
+  const { password_hash, ...sanitized } = updated;
+
+  broadcastWs({ type: 'USER_UPDATED', user: sanitized });
+  res.json({ success: true, avatar: avatarUrl, user: sanitized });
 });
 
-// Upload Attachment for tickets/replies
-router.post('/upload/attachment', requireAuth, upload.single('file'), (req, res) => {
+// Unlink Telegram from Profile
+router.delete('/profile/telegram', requireAuth, (req, res) => {
+  const updated = db.unlinkUserTelegram(req.user.id);
+  const { password_hash, ...sanitized } = updated;
+  res.json({ success: true, user: sanitized });
+});
+
+// Upload Attachment File (for tickets and replies)
+router.post('/upload', requireAuth, upload.single('file'), (req, res) => {
   if (!req.file) {
-    return res.status(400).json({ error: 'هیچ فایلی ارسال نشده است.' });
+    return res.status(400).json({ error: 'فایل آپلود نشد.' });
   }
+
   res.json({
     id: 'att_' + Date.now(),
     name: req.file.originalname,
     size: req.file.size,
     type: req.file.mimetype,
-    url: `./uploads/${req.file.filename}`
+    url: `/uploads/${req.file.filename}`,
+    uploadedAt: new Date().toISOString()
   });
 });
 
 // ---------------------------------------------------------------------
-// Web-Push Endpoints
+// Push Notifications Endpoints
 // ---------------------------------------------------------------------
 
-// VAPID Public Key for Browser PushSubscription
-router.get('/push/public-key', (req, res) => {
-  res.json({ publicKey: pushService.getPublicKey() });
+// Get VAPID Public Key for Client Registration
+router.get('/push/vapid-key', (req, res) => {
+  const publicKey = pushService.getPublicKey();
+  res.json({ publicKey });
 });
 
-// Subscribe Device to Web-Push
+// Save User Push Subscription
 router.post('/push/subscribe', requireAuth, (req, res) => {
   const { subscription } = req.body;
   if (!subscription || !subscription.endpoint) {
@@ -210,13 +214,14 @@ router.post('/push/test', requireAuth, async (req, res) => {
 // Ticketing Endpoints
 // ---------------------------------------------------------------------
 
-// Get All Initial Data (Tickets, Users, Roles)
+// Get All Initial Data (Tickets, Users, Roles, Announcements)
 router.get('/sync', requireAuth, (req, res) => {
   const sanitizedUsers = db.data.users.map(({ password_hash, ...u }) => u);
   res.json({
     tickets: db.data.tickets,
     users: sanitizedUsers,
-    roles: db.data.roles
+    roles: db.data.roles,
+    announcements: db.data.announcements
   });
 });
 
@@ -264,8 +269,10 @@ router.post('/tickets', requireAuth, async (req, res) => {
     // Broadcast live to all connected WebSocket clients
     broadcastWs({ type: 'TICKET_CREATED', ticket: newTicket });
 
-    // Send Web-Push to Assignee and Tagged Users (even if tab is closed)
+    // Target recipients (assignee + tagged)
     const notifyUserIds = [assigneeId, ...(taggedUserIds || [])].filter(id => id && id !== req.user.id);
+
+    // 1. Send Web-Push
     if (notifyUserIds.length > 0) {
       pushService.sendToUsers(notifyUserIds, {
         title: `تیکت جدید: ${newTicket.title}`,
@@ -273,6 +280,28 @@ router.post('/tickets', requireAuth, async (req, res) => {
         ticketId: newTicket.id,
         url: `./?ticket=${newTicket.id}`
       });
+    }
+
+    // 2. Create Telegram Delivery Record & Send with Handshake Button
+    if (notifyUserIds.length > 0) {
+      const delivery = db.createDelivery({
+        type: 'ticket',
+        referenceId: newTicket.id,
+        title: `تیکت جدید (${newTicket.id}): ${newTicket.title}`,
+        message: `توسط ${req.user.name} ارجاع گردید.\nتوضیحات: ${(newTicket.description || 'بدون توضیح').slice(0, 150)}`,
+        targetUserIds: notifyUserIds,
+        creatorId: req.user.id
+      });
+
+      for (const targetUid of notifyUserIds) {
+        await telegramService.sendNotificationWithHandshake({
+          deliveryId: delivery.id,
+          userId: targetUid,
+          title: `تیکت جدید (${newTicket.id}): ${newTicket.title}`,
+          message: `توسط ${req.user.name} ارجاع گردید.\nتوضیحات: ${(newTicket.description || 'بدون توضیح').slice(0, 150)}`,
+          priority: newTicket.priority
+        });
+      }
     }
 
     res.json(newTicket);
@@ -350,17 +379,38 @@ router.post('/tickets/:id/replies', requireAuth, async (req, res) => {
 
   broadcastWs({ type: 'TICKET_REPLY_ADDED', ticketId: ticket.id, reply, ticket });
 
-  // Web-Push to all participants (creator, assignee, tagged)
+  // Web-Push & Telegram to all participants (creator, assignee, tagged)
   const allParticipants = [ticket.creatorId, ticket.assigneeId, ...(ticket.taggedUserIds || [])];
   const notifyIds = Array.from(new Set(allParticipants)).filter(id => id && id !== req.user.id);
 
   if (notifyIds.length > 0) {
+    // 1. Web-Push
     pushService.sendToUsers(notifyIds, {
       title: `پاسخ جدید در تیکت: ${ticket.title}`,
       body: `${req.user.name}: ${reply.content.slice(0, 70)}...`,
       ticketId: ticket.id,
       url: `./?ticket=${ticket.id}`
     });
+
+    // 2. Telegram Handshake
+    const delivery = db.createDelivery({
+      type: 'ticket',
+      referenceId: ticket.id,
+      title: `پاسخ جدید در تیکت ${ticket.id}: ${ticket.title}`,
+      message: `${req.user.name}: ${reply.content.slice(0, 150)}`,
+      targetUserIds: notifyIds,
+      creatorId: req.user.id
+    });
+
+    for (const targetUid of notifyIds) {
+      await telegramService.sendNotificationWithHandshake({
+        deliveryId: delivery.id,
+        userId: targetUid,
+        title: `پاسخ جدید در تیکت ${ticket.id}: ${ticket.title}`,
+        message: `${req.user.name}: ${reply.content.slice(0, 150)}`,
+        priority: ticket.priority
+      });
+    }
   }
 
   res.json(reply);
@@ -376,6 +426,101 @@ router.delete('/tickets/:id', requireAuth, (req, res) => {
 
   broadcastWs({ type: 'TICKET_DELETED', ticketId: req.params.id });
   res.json({ success: true });
+});
+
+// Deliveries Tracking (Accessible to Managers & Admins in main app)
+router.get('/deliveries', requireAuth, (req, res) => {
+  const userRole = db.data.roles.find(r => r.id === req.user.roleId);
+  const canView = req.user.roleId === 'admin' || req.user.roleId === 'manager' || userRole?.permissions?.includes('view_reports') || userRole?.permissions?.includes('manage_announcements');
+
+  if (!canView) {
+    return res.status(403).json({ error: 'دسترسی مشاهده گزارش تحویل اعلانات برای نقش شما مجاز نیست.' });
+  }
+
+  res.json(db.data.deliveries);
+});
+
+// Create & Dispatch Organization Announcement (Managers & Admins)
+router.post('/announcements', requireAuth, async (req, res) => {
+  const userRole = db.data.roles.find(r => r.id === req.user.roleId);
+  const canAnnounce = req.user.roleId === 'admin' || req.user.roleId === 'manager' || userRole?.permissions?.includes('manage_announcements');
+
+  if (!canAnnounce) {
+    return res.status(403).json({ error: 'دسترسی ارسال اعلانات سازمانی برای شما مجاز نیست.' });
+  }
+
+  const { title, content, targetDepartment, priority } = req.body;
+  if (!title || !content) {
+    return res.status(400).json({ error: 'عنوان و متن اعلان الزامی است.' });
+  }
+
+  const ann = db.createAnnouncement({
+    title,
+    content,
+    targetDepartment: targetDepartment || 'all',
+    priority: priority || 'normal',
+    creatorId: req.user.id
+  });
+
+  // Determine target users
+  let targetUsers = db.data.users.filter(u => !u.isRestricted);
+  if (targetDepartment && targetDepartment !== 'all') {
+    targetUsers = targetUsers.filter(u => u.department === targetDepartment);
+  }
+  const targetUserIds = targetUsers.map(u => u.id);
+
+  // Create delivery group
+  const delivery = db.createDelivery({
+    type: 'announcement',
+    referenceId: ann.id,
+    title: `بخشنامه سازمانی: ${title}`,
+    message: content,
+    targetUserIds,
+    creatorId: req.user.id
+  });
+
+  // 1. Web-Push
+  pushService.sendToUsers(targetUserIds, {
+    title: `بخشنامه سازمانی: ${title}`,
+    body: content.slice(0, 90),
+    url: './'
+  });
+
+  // 2. Telegram with Handshake Button
+  for (const u of targetUsers) {
+    if (u.telegramChatId) {
+      await telegramService.sendNotificationWithHandshake({
+        deliveryId: delivery.id,
+        userId: u.id,
+        title: `📢 بخشنامه سازمانی: ${title}`,
+        message: content,
+        priority: priority || 'normal'
+      });
+    }
+  }
+
+  broadcastWs({ type: 'ANNOUNCEMENT_CREATED', announcement: ann, delivery });
+  res.json({ success: true, announcement: ann, delivery });
+});
+
+// Manual Resend from Manager/Admin Tab
+router.post('/deliveries/:deliveryId/resend/:userId', requireAuth, async (req, res) => {
+  const { deliveryId, userId } = req.params;
+  const group = db.data.deliveries.find(d => d.id === deliveryId);
+  if (!group) return res.status(404).json({ error: 'اعلان یافت نشد.' });
+
+  const ok = await telegramService.resendReminder({
+    deliveryId,
+    userId,
+    title: group.title,
+    message: group.message
+  });
+
+  if (ok) {
+    res.json({ success: true, message: 'یادآوری مجدد با موفقیت ارسال شد.' });
+  } else {
+    res.status(400).json({ error: 'ارسال یادآوری انجام نشد (احتمالاً اکانت کاربر متصل نیست یا تایید شده است).' });
+  }
 });
 
 // Users Directory

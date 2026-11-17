@@ -3,6 +3,7 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const os = require('os');
 const db = require('../db');
+const telegramService = require('../telegram');
 const { getClientIp, getUserAgent, createToken, requireSuperadmin } = require('../auth');
 
 // Superadmin Login
@@ -80,7 +81,16 @@ router.get('/status', requireSuperadmin, (req, res) => {
       restrictedUsers: db.data.users.filter(u => u.isRestricted).length,
       tickets: db.data.tickets.length,
       pushSubscriptions: db.data.push_subscriptions.length,
+      telegramLinkedUsers: db.data.users.filter(u => u.telegramChatId).length,
+      deliveries: db.data.deliveries.length,
       logs: db.data.login_logs.length
+    },
+    telegram: {
+      botTokenSet: Boolean(db.data.system_settings.telegram_bot_token),
+      proxyUrlSet: Boolean(db.data.system_settings.telegram_proxy_url),
+      autoResendEnabled: db.data.system_settings.telegram_auto_resend_enabled,
+      resendIntervalMins: db.data.system_settings.telegram_resend_interval_mins,
+      maxResends: db.data.system_settings.telegram_max_resends
     },
     vapidKeyConfigured: Boolean(db.data.system_settings.vapid_public_key)
   });
@@ -119,10 +129,25 @@ router.put('/users/:id', requireSuperadmin, (req, res) => {
 // Toggle Restrict / Ban User
 router.put('/users/:id/restrict', requireSuperadmin, (req, res) => {
   try {
-    const { isRestricted } = req.body;
-    const user = db.setUserRestricted(req.params.id, isRestricted);
-    const { password_hash, ...sanitized } = user;
-    res.json(sanitized);
+    const user = db.findUserById(req.params.id);
+    if (!user) return res.status(404).json({ error: 'کاربر یافت نشد.' });
+
+    const updated = db.updateUser(user.id, { isRestricted: !user.isRestricted });
+    res.json({
+      success: true,
+      isRestricted: updated.isRestricted,
+      message: updated.isRestricted ? 'دسترسی کاربر مسدود گردید.' : 'دسترسی کاربر فعال شد.'
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Unlink Telegram Chat
+router.delete('/users/:id/telegram', requireSuperadmin, (req, res) => {
+  try {
+    const updated = db.unlinkUserTelegram(req.params.id);
+    res.json({ success: true, user: updated });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -145,7 +170,6 @@ router.get('/roles', requireSuperadmin, (req, res) => {
 router.post('/roles', requireSuperadmin, (req, res) => {
   try {
     const { name, description, permissions } = req.body;
-    if (!name) return res.status(400).json({ error: 'نام نقش الزامی است.' });
     const newRole = db.createRole({ name, description, permissions });
     res.json(newRole);
   } catch (err) {
@@ -165,7 +189,124 @@ router.delete('/roles/:id', requireSuperadmin, (req, res) => {
 // Login Audit Logs
 router.get('/logs', requireSuperadmin, (req, res) => {
   const limit = parseInt(req.query.limit, 10) || 100;
-  res.json(db.getLoginLogs(limit));
+  res.json(db.data.login_logs.slice(0, limit));
+});
+
+// ---------------------------------------------------------------------
+// Telegram Bot & Announcements Endpoints
+// ---------------------------------------------------------------------
+router.get('/telegram/settings', requireSuperadmin, (req, res) => {
+  const s = db.data.system_settings;
+  res.json({
+    botToken: s.telegram_bot_token || '',
+    proxyUrl: s.telegram_proxy_url || '',
+    autoResendEnabled: s.telegram_auto_resend_enabled !== false,
+    resendIntervalMins: s.telegram_resend_interval_mins || 30,
+    maxResends: s.telegram_max_resends || 3
+  });
+});
+
+router.post('/telegram/settings', requireSuperadmin, (req, res) => {
+  const updated = db.updateTelegramSettings(req.body);
+  if (updated.telegram_bot_token) {
+    telegramService.startPolling();
+  } else {
+    telegramService.stopPolling();
+  }
+  res.json({ success: true, settings: updated });
+});
+
+router.post('/telegram/test', requireSuperadmin, async (req, res) => {
+  try {
+    const bot = await telegramService.testConnection();
+    res.json({
+      success: true,
+      bot: {
+        id: bot.id,
+        first_name: bot.first_name,
+        username: bot.username
+      }
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Deliveries Tracking (Superadmin)
+router.get('/deliveries', requireSuperadmin, (req, res) => {
+  res.json(db.data.deliveries);
+});
+
+// Send Manual Resend
+router.post('/deliveries/:deliveryId/resend/:userId', requireSuperadmin, async (req, res) => {
+  const { deliveryId, userId } = req.params;
+  const group = db.data.deliveries.find(d => d.id === deliveryId);
+  if (!group) return res.status(404).json({ error: 'اعلان یافت نشد.' });
+
+  const ok = await telegramService.resendReminder({
+    deliveryId,
+    userId,
+    title: group.title,
+    message: group.message
+  });
+
+  if (ok) {
+    res.json({ success: true, message: 'یادآوری مجدد با موفقیت ارسال شد.' });
+  } else {
+    res.status(400).json({ error: 'ارسال یادآوری انجام نشد (احتمالاً اکانت کاربر متصل نیست یا تایید شده است).' });
+  }
+});
+
+// Create & Broadcast Organization Announcement
+router.post('/announcements', requireSuperadmin, async (req, res) => {
+  try {
+    const { title, content, targetDepartment, priority } = req.body;
+    if (!title || !content) {
+      return res.status(400).json({ error: 'عنوان و متن اعلان الزامی است.' });
+    }
+
+    const ann = db.createAnnouncement({
+      title,
+      content,
+      targetDepartment: targetDepartment || 'all',
+      priority: priority || 'normal',
+      creatorId: 'superadmin'
+    });
+
+    // Determine target users
+    let targetUsers = db.data.users.filter(u => !u.isRestricted);
+    if (targetDepartment && targetDepartment !== 'all') {
+      targetUsers = targetUsers.filter(u => u.department === targetDepartment);
+    }
+    const targetUserIds = targetUsers.map(u => u.id);
+
+    // Create delivery group
+    const delivery = db.createDelivery({
+      type: 'announcement',
+      referenceId: ann.id,
+      title: `بخشنامه سازمانی: ${title}`,
+      message: content,
+      targetUserIds,
+      creatorId: 'superadmin'
+    });
+
+    // Send via Telegram with Handshake Button
+    for (const u of targetUsers) {
+      if (u.telegramChatId) {
+        await telegramService.sendNotificationWithHandshake({
+          deliveryId: delivery.id,
+          userId: u.id,
+          title: `📢 بخشنامه سازمانی: ${title}`,
+          message: content,
+          priority: priority || 'normal'
+        });
+      }
+    }
+
+    res.json({ success: true, announcement: ann, delivery });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 // Superadmin Master Password Change

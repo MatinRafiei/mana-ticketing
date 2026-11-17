@@ -1,4 +1,4 @@
-// User Profile Modal Component (Edit Name, Upload Avatar, Change Password & Push Notification Status)
+// User Profile Modal Component (Edit Name, Upload Avatar, Change Password, Telegram Bot Link & Push Notification)
 
 import { state } from '../state.js';
 import { renderIcon } from '../icons.js';
@@ -33,10 +33,13 @@ export class ProfileModalComponent {
       name: 'کاربر سیستم',
       email: '',
       department: 'عمومی',
-      avatar: './icons/company_logo.png'
+      avatar: './icons/company_logo.png',
+      telegramChatId: null,
+      telegramAuthCode: '------'
     };
-    const role = state.getCurrentUserRole();
+    const role = state.getCurrentUserRole() || { name: 'کاربر سیستم' };
     const displayAvatar = this.avatarPreviewUrl || u.avatar || './icons/company_logo.png';
+    const isTelegramLinked = Boolean(u.telegramChatId);
 
     this.container.innerHTML = `
       <div class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto modal-backdrop bg-slate-950/70 backdrop-blur-sm transition-opacity">
@@ -101,16 +104,56 @@ export class ProfileModalComponent {
                 </div>
               </div>
 
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div>
-                  <label class="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">ایمیل حساب (غیرقابل تغییر)</label>
-                  <input type="text" disabled value="${u.email || ''}" class="w-full px-3.5 py-2 bg-slate-100 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 rounded-xl text-xs text-slate-500 font-mono" />
+              <div>
+                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">نقش سازمانی کنونی</label>
+                <div class="px-3.5 py-2 bg-slate-100 dark:bg-slate-800/80 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                  <span>${role.name}</span>
+                  <span class="text-[10px] text-slate-400 font-normal">تعیین شده توسط مدیر سامانه</span>
+                </div>
+              </div>
+
+              <!-- Telegram Bot Connection Box (Handshake & Notifications) -->
+              <div class="p-3.5 rounded-2xl border transition-all ${isTelegramLinked ? 'bg-emerald-50/60 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800' : 'bg-sky-50/60 dark:bg-sky-950/20 border-sky-200 dark:border-sky-800'}">
+                <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
+                  <div class="flex items-center gap-2">
+                    <span class="text-xl">✈️</span>
+                    <div>
+                      <h4 class="text-xs font-extrabold ${isTelegramLinked ? 'text-emerald-900 dark:text-emerald-300' : 'text-sky-900 dark:text-sky-300'}">
+                        اتصال به ربات تلگرام مانا
+                      </h4>
+                      <p class="text-[11px] text-slate-500 dark:text-slate-400">
+                        ${isTelegramLinked ? 'اکانت تلگرام شما متصل است و اعلان‌ها به همراه دکمه تایید ارسال می‌گردد.' : 'برای دریافت اعلان‌ها و ثبت تاییدیه دریافت در تلگرام متصل شوید.'}
+                      </p>
+                    </div>
+                  </div>
+                  <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${isTelegramLinked ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300' : 'bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300'}">
+                    ${isTelegramLinked ? 'متصل شد' : 'عدم اتصال'}
+                  </span>
                 </div>
 
-                <div>
-                  <label class="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">نقش سازمانی</label>
-                  <input type="text" disabled value="${role.name || 'پرسنل'}" class="w-full px-3.5 py-2 bg-slate-100 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 rounded-xl text-xs text-slate-500" />
-                </div>
+                ${isTelegramLinked ? `
+                  <div class="flex items-center justify-between pt-2 border-t border-emerald-100 dark:border-emerald-900/60 text-xs">
+                    <span class="text-slate-600 dark:text-slate-400 font-mono text-[11px]">Chat ID: ${u.telegramChatId}</span>
+                    <button type="button" id="btn-unlink-telegram" class="text-rose-600 dark:text-rose-400 hover:underline font-bold text-[11px]">
+                      قطع اتصال تلگرام
+                    </button>
+                  </div>
+                ` : `
+                  <div class="pt-2 border-t border-sky-100 dark:border-sky-900/60 space-y-2">
+                    <div class="flex items-center justify-between bg-white dark:bg-slate-800 p-2.5 rounded-xl border border-sky-200/60 dark:border-sky-800/60 text-xs">
+                      <div>
+                        <span class="text-slate-500 dark:text-slate-400 block text-[10px]">کد اختصاصی اتصال شما:</span>
+                        <span class="font-mono font-black text-sm tracking-widest text-blue-600 dark:text-blue-400 select-all" id="text-auth-code">${u.telegramAuthCode || '------'}</span>
+                      </div>
+                      <button type="button" id="btn-copy-auth-code" class="px-3 py-1 rounded-lg bg-sky-100 dark:bg-sky-900 text-sky-700 dark:text-sky-300 font-bold text-[11px] hover:bg-sky-200 transition">
+                        کپی کد
+                      </button>
+                    </div>
+                    <p class="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                      کافیست وارد ربات شرکت در تلگرام شوید و دستور <code class="font-mono bg-white dark:bg-slate-800 px-1 rounded">/start ${u.telegramAuthCode || ''}</code> یا خود کد ۶ رقمی را ارسال نمایید.
+                    </p>
+                  </div>
+                `}
               </div>
 
               <!-- Change Password Collapsible Section -->
@@ -146,7 +189,7 @@ export class ProfileModalComponent {
                   </div>
                   <div>
                     <span class="text-xs font-bold text-slate-900 dark:text-white block">اعلان‌های بلادرنگ روی این دستگاه</span>
-                    <span class="text-[10px] text-slate-500 dark:text-slate-400 block">دریافت زنگ و نوتیفیکیشن حتی با بسته بودن تب مرورگر</span>
+                    <span class="text-[10px] text-slate-500 dark:text-slate-400 block">دریافت زنگ و نوتیفیکیشن مرورگر</span>
                   </div>
                 </div>
                 <button type="button" id="btn-test-push" class="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition flex items-center gap-1 shadow-sm">
@@ -184,6 +227,46 @@ export class ProfileModalComponent {
     document.getElementById('profile-close-btn')?.addEventListener('click', () => this.close());
     document.getElementById('btn-cancel-profile')?.addEventListener('click', () => this.close());
 
+    // Copy Auth Code
+    document.getElementById('btn-copy-auth-code')?.addEventListener('click', () => {
+      const code = document.getElementById('text-auth-code')?.innerText;
+      if (code) {
+        navigator.clipboard.writeText(code).then(() => {
+          notificationEngine.triggerToast({
+            title: 'کد کپی شد',
+            message: `کد ${code} در کلیپ‌بورد کپی شد. اکنون آن را به ربات تلگرام بفرستید.`,
+            type: 'success'
+          });
+        });
+      }
+    });
+
+    // Unlink Telegram
+    document.getElementById('btn-unlink-telegram')?.addEventListener('click', async () => {
+      if (confirm('آیا مایل به قطع اتصال اکانت تلگرام از سامانه هستید؟')) {
+        try {
+          const res = await fetch('/api/profile/telegram', {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('token')}`
+            }
+          });
+          const data = await res.json();
+          if (data.user) {
+            state.currentUser = data.user;
+            this.render();
+            notificationEngine.triggerToast({
+              title: 'اتصال تلگرام قطع شد',
+              message: 'حساب تلگرام شما از سامانه جدا گردید.',
+              type: 'info'
+            });
+          }
+        } catch (err) {
+          alert('خطا در قطع اتصال تلگرام: ' + err.message);
+        }
+      }
+    });
+
     // Toggle Password Box
     document.getElementById('btn-toggle-pwd-box')?.addEventListener('click', () => {
       document.getElementById('pwd-box')?.classList.toggle('hidden');
@@ -216,17 +299,11 @@ export class ProfileModalComponent {
       btn.innerHTML = 'در حال ارسال تست...';
       try {
         if (state.serverProvider && state.serverProvider.isLoggedIn()) {
-          const res = await state.serverProvider.testPushNotification();
+          await state.serverProvider.testPushNotification();
           notificationEngine.triggerToast({
             title: 'سیگنال تست ارسال شد',
             message: `اعلان به دستگاه‌های ثبت‌شده شما با موفقیت ارسال گردید.`,
             type: 'success'
-          });
-        } else {
-          notificationEngine.notify({
-            title: 'تست موفق اعلان محلی مانا',
-            message: 'صدا و اعلان سامانه روی مرورگر شما به درستی کار می‌کند.',
-            soundName: 'complete'
           });
         }
       } catch (err) {
@@ -249,76 +326,56 @@ export class ProfileModalComponent {
     const form = document.getElementById('profile-edit-form');
     form?.addEventListener('submit', async (e) => {
       e.preventDefault();
+      const name = document.getElementById('profile-name').value.trim();
+      const department = document.getElementById('profile-dept').value.trim();
+      const currentPassword = document.getElementById('profile-curr-pwd')?.value || '';
+      const newPassword = document.getElementById('profile-new-pwd')?.value || '';
+      const confirmPassword = document.getElementById('profile-new-pwd-confirm')?.value || '';
+
+      if (newPassword) {
+        if (newPassword.length < 6) {
+          alert('رمز عبور جدید باید حداقل ۶ کاراکتر باشد.');
+          return;
+        }
+        if (newPassword !== confirmPassword) {
+          alert('رمز عبور جدید و تکرار آن یکسان نیستند.');
+          return;
+        }
+      }
+
       const saveBtn = document.getElementById('btn-save-profile');
       saveBtn.disabled = true;
       saveBtn.innerHTML = 'در حال ذخیره...';
 
       try {
-        const name = document.getElementById('profile-name').value.trim();
-        const department = document.getElementById('profile-dept').value.trim();
-        const currPwd = document.getElementById('profile-curr-pwd')?.value;
-        const newPwd = document.getElementById('profile-new-pwd')?.value;
-        const confirmPwd = document.getElementById('profile-new-pwd-confirm')?.value;
-
-        if (newPwd) {
-          if (newPwd !== confirmPwd) {
-            alert('رمز عبور جدید و تکرار آن یکسان نیستند.');
-            saveBtn.disabled = false;
-            saveBtn.innerHTML = 'ذخیره تغییرات';
-            return;
-          }
-          if (newPwd.length < 6) {
-            alert('رمز عبور جدید باید حداقل ۶ کاراکتر باشد.');
-            saveBtn.disabled = false;
-            saveBtn.innerHTML = 'ذخیره تغییرات';
-            return;
+        if (this.selectedAvatarFile) {
+          const avatarRes = await state.serverProvider.uploadAvatar(this.selectedAvatarFile);
+          if (avatarRes && avatarRes.user) {
+            state.currentUser = avatarRes.user;
           }
         }
 
-        // 1. Upload avatar if changed
-        let uploadedAvatarUrl = null;
-        if (this.selectedAvatarFile && state.serverProvider && state.serverProvider.isLoggedIn()) {
-          try {
-            uploadedAvatarUrl = await state.serverProvider.uploadAvatar(this.selectedAvatarFile);
-          } catch (uploadErr) {
-            console.warn('Avatar upload failed, falling back to base64 preview:', uploadErr);
-            uploadedAvatarUrl = this.avatarPreviewUrl;
-          }
-        } else if (this.avatarPreviewUrl) {
-          uploadedAvatarUrl = this.avatarPreviewUrl;
+        const updates = { name, department };
+        if (newPassword) {
+          updates.currentPassword = currentPassword;
+          updates.newPassword = newPassword;
         }
 
-        // 2. Update profile on server
-        if (state.serverProvider && state.serverProvider.isLoggedIn()) {
-          const updatePayload = { name, department };
-          if (uploadedAvatarUrl) updatePayload.avatar = uploadedAvatarUrl;
-          if (newPwd) {
-            updatePayload.currentPassword = currPwd;
-            updatePayload.newPassword = newPwd;
-          }
-          await state.serverProvider.updateProfile(updatePayload);
-        }
-
-        // 3. Update local state
-        if (state.currentUser) {
-          state.currentUser.name = name;
-          state.currentUser.department = department;
-          if (uploadedAvatarUrl) state.currentUser.avatar = uploadedAvatarUrl;
-          state.currentUser.initials = name.split(' ').map(p => p[0]).join('‌');
-          state.persistLocal();
-          state.emit('user_changed', state.currentUser);
-          state.emit('state_updated');
+        const updatedUser = await state.serverProvider.updateProfile(updates);
+        if (updatedUser) {
+          state.currentUser = updatedUser;
         }
 
         notificationEngine.triggerToast({
-          title: 'پروفایل بروزرسانی شد',
-          message: 'تغییرات مشخصات کاربری شما با موفقیت ثبت گردید.',
+          title: 'پروفایل با موفقیت ویرایش شد',
+          message: 'تغییرات شما ذخیره گردید.',
           type: 'success'
         });
 
         this.close();
+        state.emit('user_changed', state.currentUser);
       } catch (err) {
-        alert(err.message || 'خطا در ثبت تغییرات');
+        alert('خطا در ذخیره پروفایل: ' + err.message);
       } finally {
         if (saveBtn) {
           saveBtn.disabled = false;

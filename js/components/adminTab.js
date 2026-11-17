@@ -1,4 +1,4 @@
-// Management & Roles Tab: Fully Responsive Analytics, Mobile Cards & RBAC Controls
+// Management & Roles Tab: Fully Responsive Analytics, Mobile Cards, RBAC Controls, & Telegram Deliveries Tracking
 
 import { state } from '../state.js';
 import { renderIcon } from '../icons.js';
@@ -8,39 +8,36 @@ import { notificationEngine } from '../notifications.js';
 export class AdminTabComponent {
   constructor(containerId) {
     this.container = document.getElementById(containerId);
-    this.activeSection = 'overview'; // overview, roles, users
+    this.activeSection = 'overview'; // overview, deliveries, announcements, roles, users
     this.isCreatingRole = false;
     this.isAddingUser = false;
+    this.deliveries = [];
+    this.isLoadingDeliveries = false;
     this.draftUser = { name: '', email: '', department: '', roleId: 'member' };
     this.draftRole = { name: '', description: '', permissions: ['create_ticket'] };
   }
 
+  async fetchDeliveries() {
+    this.isLoadingDeliveries = true;
+    try {
+      const res = await fetch('/api/deliveries', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      if (res.ok) {
+        this.deliveries = await res.json();
+      }
+    } catch (err) {
+      console.warn('Fetch deliveries notice:', err);
+    } finally {
+      this.isLoadingDeliveries = false;
+      this.render();
+    }
+  }
+
   render() {
     if (!this.container) return;
-
-    // Preserve ongoing draft inputs if user is currently typing
-    const curUserName = document.getElementById('user-name');
-    if (curUserName) {
-      this.draftUser = {
-        name: curUserName.value,
-        email: document.getElementById('user-email')?.value || '',
-        department: document.getElementById('user-dept')?.value || '',
-        roleId: document.getElementById('user-role-select')?.value || 'member'
-      };
-    }
-    const curRoleName = document.getElementById('role-name');
-    if (curRoleName) {
-      this.draftRole = {
-        name: curRoleName.value,
-        description: document.getElementById('role-desc')?.value || '',
-        permissions: this.draftRole?.permissions || ['create_ticket']
-      };
-    }
-
-    const activeEl = document.activeElement;
-    const activeId = activeEl?.id;
-    const selStart = (activeEl && typeof activeEl.selectionStart === 'number') ? activeEl.selectionStart : null;
-    const selEnd = (activeEl && typeof activeEl.selectionEnd === 'number') ? activeEl.selectionEnd : null;
 
     const totalTickets = state.tickets.length;
     const inProgress = state.tickets.filter(t => t.status === 'open' || t.status === 'in_progress' || t.status === 'waiting').length;
@@ -55,29 +52,35 @@ export class AdminTabComponent {
     this.container.innerHTML = `
       <div class="space-y-4 sm:space-y-6 pb-20 md:pb-6">
 
-        <!-- Top Header & Horizontal Scrollable Sub-Tabs -->
+        <!-- Top Header & Sub-Tabs -->
         <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl p-4 sm:p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div class="flex items-center gap-2.5">
             <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
               ${renderIcon('shield', 'w-5 h-5')}
             </div>
             <div>
-              <h2 class="font-extrabold text-sm sm:text-lg text-slate-900 dark:text-white">پنل مدیریت و پایش</h2>
-              <p class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">نظارت بر تیکت‌ها، نقش‌ها و دسترسی‌ها</p>
+              <h2 class="font-extrabold text-sm sm:text-lg text-slate-900 dark:text-white">پنل مدیریت و پایش تیکتینگ</h2>
+              <p class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">نظارت بر تیکت‌ها، اعلانات تلگرام و تایید دریافت</p>
             </div>
           </div>
 
-          <!-- Section Switcher (Scrollable on small mobile screens) -->
+          <!-- Section Switcher -->
           <div class="overflow-x-auto no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0">
             <div class="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl min-w-max">
               <button class="admin-sec-btn px-3 py-1.5 text-xs font-bold rounded-xl transition ${this.activeSection === 'overview' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}" data-sec="overview">
                 پایش تیکت‌ها
               </button>
+              <button class="admin-sec-btn px-3 py-1.5 text-xs font-bold rounded-xl transition ${this.activeSection === 'deliveries' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}" data-sec="deliveries">
+                پایش اعلانات و تلگرام
+              </button>
+              <button class="admin-sec-btn px-3 py-1.5 text-xs font-bold rounded-xl transition ${this.activeSection === 'announcements' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}" data-sec="announcements">
+                بخشنامه و اعلانات
+              </button>
               <button class="admin-sec-btn px-3 py-1.5 text-xs font-bold rounded-xl transition ${this.activeSection === 'roles' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}" data-sec="roles">
-                نقش‌ها و دسترسی
+                نقش‌ها
               </button>
               <button class="admin-sec-btn px-3 py-1.5 text-xs font-bold rounded-xl transition ${this.activeSection === 'users' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}" data-sec="users">
-                پرسنل و همکاران
+                پرسنل
               </button>
             </div>
           </div>
@@ -85,7 +88,6 @@ export class AdminTabComponent {
 
         <!-- Section 1: Overview & Master Tickets -->
         ${this.activeSection === 'overview' ? `
-          <!-- KPI Metrics Row -->
           <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
             <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl shadow-sm">
               <span class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 block mb-1">کل تیکت‌ها</span>
@@ -119,110 +121,38 @@ export class AdminTabComponent {
                 <h3 class="font-bold text-xs sm:text-sm text-slate-900 dark:text-white">جدول و تاریخچه گردش تیکت‌ها</h3>
                 <p class="text-[11px] text-slate-500 dark:text-slate-400">پیشرفت، مهلت‌ها و مسئولین</p>
               </div>
-              <div class="flex items-center gap-2 flex-wrap">
-                <button id="btn-factory-reset-admin" class="px-3 py-1.5 rounded-xl border border-rose-300 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-xs font-semibold transition flex items-center gap-1" title="بازنشانی کامل سامانه و بازگشت به نقطه صفر">
-                  ${renderIcon('trash', 'w-3.5 h-3.5')}
-                  <span>بازنشانی کامل سامانه</span>
-                </button>
-                <button id="btn-export-data" class="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition flex items-center gap-1">
-                  ${renderIcon('download', 'w-3.5 h-3.5 text-slate-500')}
-                  <span>خروجی JSON</span>
-                </button>
-              </div>
             </div>
 
-            <!-- Mobile View: Responsive Cards List -->
-            <div class="block md:hidden divide-y divide-slate-100 dark:divide-slate-800 p-2">
-              ${state.tickets.length === 0 ? `
-                <div class="p-6 text-center text-slate-400 dark:text-slate-500 text-xs">
-                  هیچ تیکتی در سامانه ثبت نشده است. سامانه آماده فعالیت است.
-                </div>
-              ` : state.tickets.map(ticket => {
-                const assignee = state.getUser(ticket.assigneeId);
-                const deadlineInfo = getDeadlineStatus(ticket.deadline);
-                return `
-                  <div class="p-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 rounded-xl transition space-y-2">
-                    <div class="flex items-center justify-between">
-                      <div class="flex items-center gap-1.5">
-                        <span class="font-mono text-[10px] font-bold text-slate-500">${ticket.id}</span>
-                        <span class="text-[10px] px-2 py-0.5 rounded-md font-bold status-badge-${ticket.status}">${state.getStatusLabel(ticket.status)}</span>
-                      </div>
-                      <span class="text-[10px] font-bold px-2 py-0.5 rounded-md ${deadlineInfo.badgeClass}">${deadlineInfo.label}</span>
-                    </div>
-
-                    <div class="font-bold text-xs text-slate-900 dark:text-white truncate">${ticket.title}</div>
-
-                    <div class="flex items-center justify-between text-[11px] text-slate-500">
-                      <div class="flex items-center gap-1.5">
-                        <img src="${assignee?.avatar}" class="w-4 h-4 rounded-full object-cover" />
-                        <span>${assignee?.name}</span>
-                      </div>
-                      <button class="text-blue-600 dark:text-blue-400 font-bold hover:underline master-view-btn" data-id="${ticket.id}">
-                        بررسی و تاریخچه
-                      </button>
-                    </div>
-                  </div>
-                `;
-              }).join('')}
-            </div>
-
-            <!-- Desktop View: Full Table -->
-            <div class="hidden md:block overflow-x-auto">
+            <div class="overflow-x-auto">
               <table class="w-full text-right text-xs">
                 <thead class="bg-slate-50 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800">
                   <tr>
-                    <th class="py-3 px-4 font-bold">کد</th>
-                    <th class="py-3 px-4 font-bold">عنوان تیکت</th>
-                    <th class="py-3 px-4 font-bold">مسئول انجام</th>
-                    <th class="py-3 px-4 font-bold">ایجادکننده</th>
+                    <th class="py-3 px-4 font-bold">شناسه و عنوان تیکت</th>
+                    <th class="py-3 px-4 font-bold">ارجاع گیرنده</th>
                     <th class="py-3 px-4 font-bold">وضعیت</th>
                     <th class="py-3 px-4 font-bold">اولویت</th>
                     <th class="py-3 px-4 font-bold">مهلت</th>
-                    <th class="py-3 px-4 font-bold">پاسخ‌ها</th>
-                    <th class="py-3 px-4 font-bold">عملیات</th>
+                    <th class="py-3 px-4 font-bold text-center">مشاهده</th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
-                  ${state.tickets.length === 0 ? `
-                    <tr>
-                      <td colspan="9" class="py-8 text-center text-slate-400 dark:text-slate-500 text-xs">
-                        هیچ تیکتی ثبت نشده است. جهت شروع، تیکت جدید ثبت فرمایید.
-                      </td>
-                    </tr>
-                  ` : state.tickets.map(ticket => {
-                    const assignee = state.getUser(ticket.assigneeId);
-                    const creator = state.getUser(ticket.creatorId);
-                    const deadlineInfo = getDeadlineStatus(ticket.deadline);
+                  ${state.tickets.map(t => {
+                    const assignee = state.getUser(t.assigneeId);
                     return `
                       <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition">
-                        <td class="py-3 px-4 font-mono font-bold text-slate-600 dark:text-slate-300">${ticket.id}</td>
-                        <td class="py-3 px-4 font-medium text-slate-900 dark:text-white max-w-[200px] truncate" title="${ticket.title}">${ticket.title}</td>
-                        <td class="py-3 px-4">
-                          <div class="flex items-center gap-1.5">
-                            <img src="${assignee?.avatar}" class="w-5 h-5 rounded-full object-cover" />
-                            <span>${assignee?.name}</span>
-                          </div>
+                        <td class="py-3 px-4 font-bold text-slate-900 dark:text-white">
+                          <span class="font-mono text-[10px] text-blue-600 block">${t.id}</span>
+                          ${t.title}
                         </td>
-                        <td class="py-3 px-4 text-slate-500">${creator?.name}</td>
+                        <td class="py-3 px-4 text-slate-700 dark:text-slate-300">${assignee ? assignee.name : 'نامشخص'}</td>
                         <td class="py-3 px-4">
-                          <span class="px-2 py-0.5 rounded-lg text-[10px] font-bold status-badge-${ticket.status}">
-                            ${state.getStatusLabel(ticket.status)}
-                          </span>
+                          <span class="px-2 py-0.5 rounded text-[10px] font-bold status-badge-${t.status}">${state.getStatusLabel(t.status)}</span>
                         </td>
-                        <td class="py-3 px-4">
-                          <span class="px-2 py-0.5 rounded-lg text-[10px] font-bold priority-${ticket.priority}">
-                            ${state.getPriorityLabel(ticket.priority)}
-                          </span>
-                        </td>
-                        <td class="py-3 px-4">
-                          <span class="text-[10px] font-bold px-2 py-0.5 rounded-lg ${deadlineInfo.badgeClass}">
-                            ${deadlineInfo.label}
-                          </span>
-                        </td>
-                        <td class="py-3 px-4 text-slate-500 font-bold">${toPersianDigits(ticket.replies?.length || 0)}</td>
-                        <td class="py-3 px-4">
-                          <button class="text-blue-600 dark:text-blue-400 hover:underline font-bold master-view-btn" data-id="${ticket.id}">
-                            بررسی
+                        <td class="py-3 px-4 text-slate-600 dark:text-slate-400">${state.getPriorityLabel(t.priority)}</td>
+                        <td class="py-3 px-4 text-slate-500 font-mono text-[11px]">${t.deadline ? formatJalali(t.deadline) : '-'}</td>
+                        <td class="py-3 px-4 text-center">
+                          <button class="master-view-btn px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-bold hover:bg-blue-100 transition" data-id="${t.id}">
+                            نمایش
                           </button>
                         </td>
                       </tr>
@@ -234,221 +164,271 @@ export class AdminTabComponent {
           </div>
         ` : ''}
 
-        <!-- Section 2: Roles & Permissions -->
-        ${this.activeSection === 'roles' ? `
-          <div class="space-y-4 sm:space-y-6">
+        <!-- Section 2: Deliveries & Handshake Interaction Tracking -->
+        ${this.activeSection === 'deliveries' ? `
+          <div class="space-y-4">
             <div class="flex items-center justify-between flex-wrap gap-2">
               <div>
-                <h3 class="text-sm sm:text-base font-bold text-slate-900 dark:text-white">نقش‌ها و دسترسی‌های سازمانی</h3>
-                <p class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">تعریف نقش‌های اختصاصی و سطوح دسترسی</p>
+                <h3 class="text-sm sm:text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <span>✈️ پایش ارسال و تاییدیه دریافت پیام‌ها در تلگرام</span>
+                  <span class="px-2 py-0.5 text-[10px] font-bold bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-full">هندشیک فعال</span>
+                </h3>
+                <p class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">مشاهده لحظه‌ای وضعیت رویت و لمس دکمه «مشاهده شد» توسط پرسنل</p>
               </div>
-              <button id="btn-show-create-role" class="px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-blue-500/20">
-                ${renderIcon('plus', 'w-4 h-4')}
-                تعریف نقش جدید
+              <button id="btn-refresh-deliveries" class="px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center gap-1.5">
+                ${renderIcon('refresh', 'w-3.5 h-3.5')}
+                <span>بروزرسانی وضعیت</span>
               </button>
             </div>
 
-            <!-- Create New Role Box -->
-            <div id="create-role-box" class="${this.isCreatingRole ? 'block' : 'hidden'} bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-2xl sm:rounded-3xl p-4 sm:p-6">
-              <h4 class="font-bold text-xs sm:text-sm text-slate-900 dark:text-white mb-3">تعریف نقش سفارشی جدید</h4>
-              <form id="new-role-form" class="space-y-3 sm:space-y-4">
+            <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl overflow-hidden shadow-sm">
+              ${this.deliveries.length === 0 ? `
+                <div class="p-8 text-center text-slate-400 dark:text-slate-500 text-xs">
+                  هنوز اعلانی ثبت نشده است یا در حال بارگذاری داده‌ها می‌باشد.
+                </div>
+              ` : `
+                <div class="divide-y divide-slate-100 dark:divide-slate-800">
+                  ${this.deliveries.map(group => `
+                    <div class="p-4 sm:p-5 space-y-3">
+                      <div class="flex items-start justify-between flex-wrap gap-2">
+                        <div>
+                          <div class="flex items-center gap-2">
+                            <span class="px-2 py-0.5 rounded text-[10px] font-bold ${group.type === 'announcement' ? 'bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300' : 'bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300'}">
+                              ${group.type === 'announcement' ? 'بخشنامه سازمانی' : 'تیکت'}
+                            </span>
+                            <h4 class="font-bold text-xs sm:text-sm text-slate-900 dark:text-white">${group.title}</h4>
+                          </div>
+                          <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">${group.message}</p>
+                        </div>
+                        <span class="text-[10px] text-slate-400 font-mono">${formatJalali(group.createdAt)}</span>
+                      </div>
+
+                      <!-- Recipients delivery status chips -->
+                      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 pt-2 border-t border-slate-100 dark:border-slate-800/60">
+                        ${group.recipients.map(r => `
+                          <div class="p-2.5 rounded-xl border flex items-center justify-between gap-2 ${r.status === 'acknowledged' ? 'bg-emerald-50/60 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800' : 'bg-amber-50/60 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800'}">
+                            <div class="min-w-0 flex-1">
+                              <div class="flex items-center gap-1.5">
+                                <span class="font-bold text-xs text-slate-900 dark:text-white truncate">${r.userName}</span>
+                                ${r.telegramChatId ? '<span class="text-[10px] text-sky-500" title="دارای تلگرام">✈️</span>' : '<span class="text-[9px] text-slate-400">(فاقد تلگرام)</span>'}
+                              </div>
+                              <div class="text-[10px] ${r.status === 'acknowledged' ? 'text-emerald-700 dark:text-emerald-300 font-bold' : 'text-amber-700 dark:text-amber-300'}">
+                                ${r.status === 'acknowledged' ? `✅ تایید شد: ${formatRelative(r.acknowledgedAt)}` : `⏳ در انتظار تایید (${toPersianDigits(r.resendCount || 0)} بار یادآوری)`}
+                              </div>
+                            </div>
+
+                            ${r.status !== 'acknowledged' && r.telegramChatId ? `
+                              <button class="btn-resend-reminder px-2 py-1 rounded-lg bg-white dark:bg-slate-800 text-[10px] font-bold text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-700 hover:bg-blue-50 transition shrink-0" data-del-id="${group.id}" data-user-id="${r.userId}">
+                                یادآوری فوری
+                              </button>
+                            ` : ''}
+                          </div>
+                        `).join('')}
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+              `}
+            </div>
+          </div>
+        ` : ''}
+
+        <!-- Section 3: Create Announcement -->
+        ${this.activeSection === 'announcements' ? `
+          <div class="space-y-4">
+            <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl p-5 shadow-sm space-y-4">
+              <div class="border-b border-slate-100 dark:border-slate-800 pb-3">
+                <h3 class="font-bold text-sm sm:text-base text-slate-900 dark:text-white flex items-center gap-2">
+                  <span>📢 ارسال بخشنامه و اعلان رسمی درون‌سازمانی</span>
+                </h3>
+                <p class="text-xs text-slate-500 dark:text-slate-400">پیام به تلگرام و نوتیفیکیشن گوشی پرسنل ارسال شده و تاییدیه رویت ثبت می‌گردد.</p>
+              </div>
+
+              <form id="announcement-form" class="space-y-3.5">
+                <div>
+                  <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">عنوان بخشنامه / اطلاعیه <span class="text-rose-500">*</span></label>
+                  <input type="text" id="ann-title" required placeholder="مثال: جلسه عمومی روز سه‌شنبه ساعت ۱۰" class="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs dark:text-white focus:ring-2 focus:ring-blue-500" />
+                </div>
+
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">نام نقش <span class="text-rose-500">*</span></label>
-                    <input type="text" id="role-name" required value="${this.draftRole?.name || ''}" placeholder="مثال: کارشناس ارشد، بازرس..." class="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs dark:text-white" />
+                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">گیرندگان (واحد سازمانی)</label>
+                    <select id="ann-dept" class="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs dark:text-white">
+                      <option value="all">تمام پرسنل سازمان</option>
+                      ${Array.from(new Set(state.users.map(u => u.department))).filter(Boolean).map(d => `<option value="${d}">${d}</option>`).join('')}
+                    </select>
                   </div>
                   <div>
-                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">توضیحات</label>
-                    <input type="text" id="role-desc" value="${this.draftRole?.description || ''}" placeholder="توضیح مسئولیت‌های نقش..." class="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs dark:text-white" />
+                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">درجه اهمیت</label>
+                    <select id="ann-priority" class="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs dark:text-white">
+                      <option value="normal">عادی</option>
+                      <option value="high">مهم</option>
+                      <option value="urgent">فوری و اضطراری</option>
+                    </select>
                   </div>
                 </div>
 
                 <div>
-                  <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">مجوزها و دسترسی‌ها:</label>
-                  <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5 bg-white dark:bg-slate-800 p-3 sm:p-4 rounded-xl border border-slate-200 dark:border-slate-700">
-                    <label class="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
-                      <input type="checkbox" name="role_perm" value="view_all_tickets" class="rounded text-blue-600 focus:ring-blue-500" />
-                      مشاهده همه تیکت‌ها
-                    </label>
-                    <label class="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
-                      <input type="checkbox" name="role_perm" value="create_ticket" checked class="rounded text-blue-600 focus:ring-blue-500" />
-                      ثبت تیکت جدید
-                    </label>
-                    <label class="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
-                      <input type="checkbox" name="role_perm" value="edit_all_tickets" class="rounded text-blue-600 focus:ring-blue-500" />
-                      ویرایش تیکت دیگران
-                    </label>
-                    <label class="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
-                      <input type="checkbox" name="role_perm" value="delete_ticket" class="rounded text-blue-600 focus:ring-blue-500" />
-                      حذف تیکت
-                    </label>
-                    <label class="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
-                      <input type="checkbox" name="role_perm" value="reassign_ticket" class="rounded text-blue-600 focus:ring-blue-500" />
-                      ارجاع مجدد
-                    </label>
-                    <label class="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
-                      <input type="checkbox" name="role_perm" value="manage_roles" class="rounded text-blue-600 focus:ring-blue-500" />
-                      مدیریت نقش‌ها
-                    </label>
-                    <label class="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
-                      <input type="checkbox" name="role_perm" value="manage_users" class="rounded text-blue-600 focus:ring-blue-500" />
-                      مدیریت کاربران
-                    </label>
-                    <label class="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
-                      <input type="checkbox" name="role_perm" value="view_reports" class="rounded text-blue-600 focus:ring-blue-500" />
-                      مشاهده گزارشات
-                    </label>
-                  </div>
+                  <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">متن کامل اطلاعیه <span class="text-rose-500">*</span></label>
+                  <textarea id="ann-content" required rows="4" placeholder="متن پیام و نکات الزامی را اینجا بنویسید..." class="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs dark:text-white focus:ring-2 focus:ring-blue-500"></textarea>
                 </div>
 
-                <div class="flex items-center justify-end gap-2 pt-1">
-                  <button type="button" id="btn-cancel-create-role" class="px-3.5 py-1.5 text-xs font-bold text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition">
-                    انصراف
-                  </button>
-                  <button type="submit" class="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20">
-                    ذخیره نقش
+                <div class="flex items-center justify-end pt-2">
+                  <button type="submit" id="btn-submit-ann" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-bold shadow-md shadow-blue-500/25 transition flex items-center gap-1.5">
+                    ${renderIcon('send', 'w-4 h-4')}
+                    <span>ارسال بخشنامه و دریافت تاییدیه</span>
                   </button>
                 </div>
               </form>
             </div>
+          </div>
+        ` : ''}
 
-            <!-- Existing Roles Cards Grid -->
+        <!-- Section 4: Roles Directory -->
+        ${this.activeSection === 'roles' ? `
+          <div class="space-y-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 class="text-sm sm:text-base font-bold text-slate-900 dark:text-white">نقش‌ها و سطوح دسترسی (RBAC)</h3>
+                <p class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">تعریف عناوین شغلی و اختیارات</p>
+              </div>
+              <button id="btn-show-create-role" class="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm">
+                ${renderIcon('plus', 'w-4 h-4')}
+                افزودن نقش جدید
+              </button>
+            </div>
+
+            <!-- Add Role Form -->
+            <div id="create-role-box" class="${this.isCreatingRole ? 'block' : 'hidden'} bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-2xl p-4 sm:p-5">
+              <h4 class="font-bold text-xs sm:text-sm text-slate-900 dark:text-white mb-3">تعریف نقش سازمانی جدید</h4>
+              <form id="new-role-form" class="space-y-3">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">نام نقش <span class="text-rose-500">*</span></label>
+                    <input type="text" id="role-name" required placeholder="مثال: سرپرست انبار" class="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs dark:text-white" />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">شرح وظایف</label>
+                    <input type="text" id="role-desc" placeholder="توضیح کوتاه درباره دسترسی‌ها" class="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs dark:text-white" />
+                  </div>
+                </div>
+
+                <div class="pt-2">
+                  <span class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">مجوزهای مجاز برای این نقش:</span>
+                  <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                    <label class="flex items-center gap-1.5 cursor-pointer">
+                      <input type="checkbox" name="role_perm" value="create_ticket" checked class="rounded text-blue-600" />
+                      <span>ثبت تیکت</span>
+                    </label>
+                    <label class="flex items-center gap-1.5 cursor-pointer">
+                      <input type="checkbox" name="role_perm" value="view_all_tickets" class="rounded text-blue-600" />
+                      <span>مشاهده همه تیکت‌ها</span>
+                    </label>
+                    <label class="flex items-center gap-1.5 cursor-pointer">
+                      <input type="checkbox" name="role_perm" value="edit_all_tickets" class="rounded text-blue-600" />
+                      <span>ویرایش تیکت‌های دیگران</span>
+                    </label>
+                    <label class="flex items-center gap-1.5 cursor-pointer">
+                      <input type="checkbox" name="role_perm" value="manage_announcements" class="rounded text-blue-600" />
+                      <span>ارسال بخشنامه و اعلانات</span>
+                    </label>
+                    <label class="flex items-center gap-1.5 cursor-pointer">
+                      <input type="checkbox" name="role_perm" value="view_reports" class="rounded text-blue-600" />
+                      <span>پایش اعلانات و تلگرام</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div class="flex items-center justify-end gap-2 pt-2">
+                  <button type="button" id="btn-cancel-create-role" class="px-3.5 py-1.5 text-xs font-bold text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl">انصراف</button>
+                  <button type="submit" class="px-4 py-1.5 bg-blue-600 text-white rounded-xl text-xs font-bold">ثبت نقش</button>
+                </div>
+              </form>
+            </div>
+
+            <!-- Roles Grid -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
               ${state.roles.map(r => `
-                <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl p-4 sm:p-5 shadow-sm space-y-2.5">
-                  <div class="flex items-start justify-between">
-                    <div>
-                      <div class="flex items-center gap-2">
-                        <h4 class="font-bold text-xs sm:text-sm text-slate-900 dark:text-white">${r.name}</h4>
-                        ${r.id === 'admin' ? `<span class="bg-blue-100 dark:bg-blue-900/60 text-[10px] font-bold text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-md">مدیر سیستم</span>` : r.isSystem ? `<span class="bg-slate-100 dark:bg-slate-800 text-[10px] font-bold text-slate-500 px-2 py-0.5 rounded-md">پیش‌فرض</span>` : `<span class="bg-emerald-100 dark:bg-emerald-950/60 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-md">سفارشی</span>`}
+                <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-2xl shadow-sm space-y-2">
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                      <div class="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold text-xs">
+                        ${r.name.slice(0, 1)}
                       </div>
-                      <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">${r.description}</p>
+                      <h4 class="font-bold text-xs sm:text-sm text-slate-900 dark:text-white">${r.name}</h4>
                     </div>
-                    ${r.id !== 'admin' ? `
-                      <button class="btn-delete-role p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition" data-role-id="${r.id}" data-role-name="${r.name}" title="حذف این نقش">
+                    ${!r.isSystem && r.id !== 'admin' ? `
+                      <button class="btn-delete-role p-1 text-slate-400 hover:text-rose-600 rounded-lg transition" data-role-id="${r.id}" data-role-name="${r.name}">
                         ${renderIcon('trash', 'w-4 h-4')}
                       </button>
-                    ` : ''}
+                    ` : '<span class="text-[10px] text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">سیستمی</span>'}
                   </div>
-
-                  <div class="pt-2 border-t border-slate-100 dark:border-slate-800">
-                    <span class="text-[10px] font-bold text-slate-400 block mb-1">مجوزها:</span>
-                    <div class="flex flex-wrap gap-1">
-                      ${r.id === 'admin' ? `
-                        <span class="text-[10px] bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 font-bold px-2 py-0.5 rounded-md">دسترسی تام به کلیه بخش‌ها</span>
-                      ` : (r.permissions || []).map(p => `
-                        <span class="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-md font-medium">
-                          ${this.getPermLabel(p)}
-                        </span>
-                      `).join('')}
-                    </div>
-                  </div>
+                  <p class="text-[11px] text-slate-500 dark:text-slate-400">${r.description || 'بدون شرح'}</p>
                 </div>
               `).join('')}
             </div>
           </div>
         ` : ''}
 
-        <!-- Section 3: Users Directory -->
+        <!-- Section 5: Users Directory -->
         ${this.activeSection === 'users' ? `
-          <div class="space-y-4 sm:space-y-6">
+          <div class="space-y-4">
             <div class="flex items-center justify-between flex-wrap gap-2">
               <div>
                 <h3 class="text-sm sm:text-base font-bold text-slate-900 dark:text-white">اعضای تیم و پرسنل</h3>
-                <p class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">تخصیص نقش‌ها و ایمیل‌های حساب گوگل</p>
+                <p class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">تخصیص نقش‌ها، ایمیل و وضعیت اتصال تلگرام</p>
               </div>
-              <div class="flex items-center gap-2 flex-wrap">
-                <button id="btn-show-add-user" class="px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-blue-500/20">
-                  ${renderIcon('plus', 'w-4 h-4')}
-                  افزودن عضو جدید
-                </button>
-              </div>
+              <button id="btn-show-add-user" class="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm">
+                ${renderIcon('plus', 'w-4 h-4')}
+                افزودن عضو جدید
+              </button>
             </div>
 
             <!-- Add User Form -->
-            <div id="add-user-box" class="${this.isAddingUser ? 'block' : 'hidden'} bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-2xl sm:rounded-3xl p-4 sm:p-6">
+            <div id="add-user-box" class="${this.isAddingUser ? 'block' : 'hidden'} bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-2xl p-4 sm:p-5">
               <h4 class="font-bold text-xs sm:text-sm text-slate-900 dark:text-white mb-3">افزودن همکار به سامانه</h4>
               <form id="new-user-form" class="space-y-3">
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">نام و نام خانوادگی <span class="text-rose-500">*</span></label>
-                    <input type="text" id="user-name" required value="${this.draftUser?.name || ''}" placeholder="مثال: رضا صادقی" class="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs dark:text-white" />
+                    <input type="text" id="user-name" required placeholder="مثال: رضا صادقی" class="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs dark:text-white" />
                   </div>
                   <div>
-                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">ایمیل گوگل <span class="text-rose-500">*</span></label>
-                    <input type="email" id="user-email" required value="${this.draftUser?.email || ''}" placeholder="name@gmail.com" class="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs dark:text-white" />
+                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">ایمیل یا جیمیل <span class="text-rose-500">*</span></label>
+                    <input type="email" id="user-email" required placeholder="name@company.com" class="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs dark:text-white font-mono" />
                   </div>
                 </div>
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">واحد سازمانی</label>
-                    <input type="text" id="user-dept" value="${this.draftUser?.department || ''}" placeholder="مثال: بازرگانی و فروش" class="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs dark:text-white" />
+                    <input type="text" id="user-dept" placeholder="مثال: فنی و مهندسی" class="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs dark:text-white" />
                   </div>
                   <div>
                     <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">نقش سازمانی</label>
                     <select id="user-role-select" class="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs dark:text-white">
-                      ${state.roles.map(r => `<option value="${r.id}" ${r.id === this.draftUser?.roleId ? 'selected' : ''}>${r.name}</option>`).join('')}
+                      ${state.roles.map(r => `<option value="${r.id}">${r.name}</option>`).join('')}
                     </select>
                   </div>
                 </div>
 
                 <div class="flex items-center justify-end gap-2 pt-1">
-                  <button type="button" id="btn-cancel-add-user" class="px-3.5 py-1.5 text-xs font-bold text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition">
-                    انصراف
-                  </button>
-                  <button type="submit" class="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20">
-                    ثبت همکار
-                  </button>
+                  <button type="button" id="btn-cancel-add-user" class="px-3.5 py-1.5 text-xs font-bold text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl">انصراف</button>
+                  <button type="submit" class="px-4 py-1.5 bg-blue-600 text-white rounded-xl text-xs font-bold">ثبت همکار</button>
                 </div>
               </form>
             </div>
 
-            <!-- Users Directory List / Table -->
+            <!-- Users Table -->
             <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl overflow-hidden shadow-sm">
-              <!-- Mobile Card View -->
-              <div class="block md:hidden divide-y divide-slate-100 dark:divide-slate-800 p-2">
-                ${state.users.map(user => `
-                  <div class="p-3 space-y-2">
-                    <div class="flex items-center justify-between">
-                      <div class="flex items-center gap-2">
-                        <img src="${user.avatar}" class="w-7 h-7 rounded-full object-cover" />
-                        <div>
-                          <div class="font-bold text-xs text-slate-900 dark:text-white">${user.name}</div>
-                          <div class="text-[10px] text-slate-400 font-mono">${user.email}</div>
-                        </div>
-                      </div>
-                      <span class="text-[10px] text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">${user.department}</span>
-                    </div>
-
-                    <div class="flex items-center justify-between pt-1">
-                      <div class="flex items-center gap-1.5">
-                        <span class="text-[10px] text-slate-400 font-bold">نقش:</span>
-                        <select class="role-changer-select text-xs px-2 py-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white" data-user-id="${user.id}">
-                          ${state.roles.map(r => `
-                            <option value="${r.id}" ${r.id === user.roleId ? 'selected' : ''}>${r.name.split(' ')[0]}</option>
-                          `).join('')}
-                        </select>
-                      </div>
-                      ${state.users.length > 1 ? `
-                        <button class="btn-delete-user p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition" data-user-id="${user.id}" data-user-name="${user.name}" title="حذف کاربر">
-                          ${renderIcon('trash', 'w-4 h-4')}
-                        </button>
-                      ` : ''}
-                    </div>
-                  </div>
-                `).join('')}
-              </div>
-
-              <!-- Desktop Table View -->
-              <div class="hidden md:block overflow-x-auto">
+              <div class="overflow-x-auto">
                 <table class="w-full text-right text-xs">
                   <thead class="bg-slate-50 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800">
                     <tr>
                       <th class="py-3 px-4 font-bold">عضو تیم</th>
-                      <th class="py-3 px-4 font-bold">ایمیل سازمانی / گوگل</th>
+                      <th class="py-3 px-4 font-bold">ایمیل سازمانی</th>
                       <th class="py-3 px-4 font-bold">واحد</th>
-                      <th class="py-3 px-4 font-bold">نقش کنونی</th>
+                      <th class="py-3 px-4 font-bold">وضعیت تلگرام</th>
                       <th class="py-3 px-4 font-bold">تغییر نقش</th>
                       <th class="py-3 px-4 font-bold text-center">عملیات</th>
                     </tr>
@@ -457,20 +437,23 @@ export class AdminTabComponent {
                     ${state.users.map(user => `
                       <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition">
                         <td class="py-3 px-4 font-bold text-slate-900 dark:text-white">
-                          <div class="flex items-center gap-2.5">
-                            <img src="${user.avatar}" class="w-8 h-8 rounded-full object-cover ring-1 ring-slate-200" />
-                            <div>
-                              <span>${user.name}</span>
-                              <span class="text-[10px] text-slate-400 block">${user.initials}</span>
-                            </div>
+                          <div class="flex items-center gap-2">
+                            <img src="${user.avatar}" class="w-8 h-8 rounded-full object-cover" />
+                            <span>${user.name}</span>
                           </div>
                         </td>
                         <td class="py-3 px-4 font-mono text-slate-600 dark:text-slate-400">${user.email}</td>
                         <td class="py-3 px-4 text-slate-600 dark:text-slate-300">${user.department}</td>
                         <td class="py-3 px-4">
-                          <span class="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300">
-                            ${state.roles.find(r => r.id === user.roleId)?.name || 'عادی'}
-                          </span>
+                          ${user.telegramChatId ? `
+                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300">
+                              <span>✈️ متصل</span>
+                            </span>
+                          ` : `
+                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500">
+                              <span>عدم اتصال (کد: ${user.telegramAuthCode || '-'})</span>
+                            </span>
+                          `}
                         </td>
                         <td class="py-3 px-4">
                           <select class="role-changer-select text-xs px-2.5 py-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white" data-user-id="${user.id}">
@@ -481,7 +464,7 @@ export class AdminTabComponent {
                         </td>
                         <td class="py-3 px-4 text-center">
                           ${state.users.length > 1 ? `
-                            <button class="btn-delete-user p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition" data-user-id="${user.id}" data-user-name="${user.name}" title="حذف کاربر">
+                            <button class="btn-delete-user p-1 text-slate-400 hover:text-rose-600 rounded-lg transition" data-user-id="${user.id}" data-user-name="${user.name}" title="حذف کاربر">
                               ${renderIcon('trash', 'w-4 h-4')}
                             </button>
                           ` : ''}
@@ -499,41 +482,103 @@ export class AdminTabComponent {
     `;
 
     this.bindEvents();
-
-    // Restore focus and cursor selection position if an input had active focus
-    if (activeId) {
-      const el = document.getElementById(activeId);
-      if (el) {
-        el.focus();
-        if (selStart !== null && selEnd !== null && typeof el.setSelectionRange === 'function') {
-          el.setSelectionRange(selStart, selEnd);
-        }
-      }
-    }
-  }
-
-  getPermLabel(perm) {
-    switch (perm) {
-      case 'view_all_tickets': return 'مشاهده همه تیکت‌ها';
-      case 'create_ticket': return 'ثبت تیکت';
-      case 'edit_all_tickets': return 'ویرایش تیکت‌های دیگران';
-      case 'delete_ticket': return 'حذف تیکت';
-      case 'reassign_ticket': return 'ارجاع مجدد';
-      case 'manage_roles': return 'مدیریت نقش‌ها';
-      case 'manage_users': return 'مدیریت کاربران';
-      case 'view_reports': return 'گزارشات';
-      default: return perm;
-    }
   }
 
   bindEvents() {
     this.container.querySelectorAll('.admin-sec-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         this.activeSection = btn.getAttribute('data-sec');
-        this.render();
+        if (this.activeSection === 'deliveries') {
+          this.fetchDeliveries();
+        } else {
+          this.render();
+        }
       });
     });
 
+    document.getElementById('btn-refresh-deliveries')?.addEventListener('click', () => {
+      this.fetchDeliveries();
+    });
+
+    // Manual Resend Reminder Button
+    this.container.querySelectorAll('.btn-resend-reminder').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const delId = btn.getAttribute('data-del-id');
+        const userId = btn.getAttribute('data-user-id');
+        btn.disabled = true;
+        btn.innerHTML = 'در حال ارسال...';
+        try {
+          const res = await fetch(`/api/deliveries/${delId}/resend/${userId}`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('token')}`
+            }
+          });
+          const data = await res.json();
+          if (res.ok) {
+            notificationEngine.triggerToast({
+              title: 'یادآوری ارسال شد',
+              message: 'پیام مجدد به تلگرام همکار ارسال گردید.',
+              type: 'success'
+            });
+            this.fetchDeliveries();
+          } else {
+            alert(data.error || 'خطا در ارسال یادآوری');
+          }
+        } catch (err) {
+          alert('خطا در برقراری ارتباط: ' + err.message);
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = 'یادآوری فوری';
+        }
+      });
+    });
+
+    // Create Announcement Submit
+    const annForm = document.getElementById('announcement-form');
+    annForm?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const title = document.getElementById('ann-title').value.trim();
+      const targetDepartment = document.getElementById('ann-dept').value;
+      const priority = document.getElementById('ann-priority').value;
+      const content = document.getElementById('ann-content').value.trim();
+
+      const submitBtn = document.getElementById('btn-submit-ann');
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = 'در حال ارسال بخشنامه...';
+
+      try {
+        const res = await fetch('/api/announcements', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          },
+          body: JSON.stringify({ title, content, targetDepartment, priority })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          notificationEngine.triggerToast({
+            title: 'بخشنامه با موفقیت ارسال شد',
+            message: 'پیام در تلگرام پرسنل با دکمه تاییدیه ارسال گردید.',
+            type: 'success'
+          });
+          this.activeSection = 'deliveries';
+          this.fetchDeliveries();
+        } else {
+          alert(data.error || 'خطا در ارسال بخشنامه');
+        }
+      } catch (err) {
+        alert('خطا در برقراری ارتباط: ' + err.message);
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = 'ارسال بخشنامه و دریافت تاییدیه';
+        }
+      }
+    });
+
+    // Master View Ticket buttons
     this.container.querySelectorAll('.master-view-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const ticketId = btn.getAttribute('data-id');
@@ -544,28 +589,7 @@ export class AdminTabComponent {
       });
     });
 
-    document.getElementById('btn-factory-reset-admin')?.addEventListener('click', async () => {
-      if (confirm('آیا مطمئن هستید که می‌خواهید سامانه را به صورت کامل ریست کنید؟ کلیه حافظه محلی، توکن‌های ورود و تنظیمات پاک شده و برنامه به حالت اولیه بازمی‌گردد.')) {
-        await state.factoryReset();
-      }
-    });
-
-    document.getElementById('btn-export-data')?.addEventListener('click', () => {
-      const dump = {
-        exportedAt: new Date().toISOString(),
-        tickets: state.tickets,
-        users: state.users,
-        roles: state.roles
-      };
-      const blob = new Blob([JSON.stringify(dump, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `ticketing_export_${new Date().toISOString().slice(0, 10)}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-    });
-
+    // Toggle Role Form
     document.getElementById('btn-show-create-role')?.addEventListener('click', () => {
       this.isCreatingRole = !this.isCreatingRole;
       this.render();
@@ -573,10 +597,10 @@ export class AdminTabComponent {
 
     document.getElementById('btn-cancel-create-role')?.addEventListener('click', () => {
       this.isCreatingRole = false;
-      this.draftRole = { name: '', description: '', permissions: ['create_ticket'] };
       this.render();
     });
 
+    // Submit New Role
     const roleForm = document.getElementById('new-role-form');
     roleForm?.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -590,14 +614,14 @@ export class AdminTabComponent {
       await state.createRole({ name, description, permissions });
       notificationEngine.triggerToast({
         title: 'نقش جدید ثبت شد',
-        message: `نقش "${name}" با موفقیت به سیستم اضافه گردید.`,
+        message: `نقش "${name}" با موفقیت اضافه شد.`,
         type: 'success'
       });
       this.isCreatingRole = false;
-      this.draftRole = { name: '', description: '', permissions: ['create_ticket'] };
       this.render();
     });
 
+    // Toggle Add User
     document.getElementById('btn-show-add-user')?.addEventListener('click', () => {
       this.isAddingUser = !this.isAddingUser;
       this.render();
@@ -605,10 +629,10 @@ export class AdminTabComponent {
 
     document.getElementById('btn-cancel-add-user')?.addEventListener('click', () => {
       this.isAddingUser = false;
-      this.draftUser = { name: '', email: '', department: '', roleId: 'member' };
       this.render();
     });
 
+    // Submit New User
     const userForm = document.getElementById('new-user-form');
     userForm?.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -625,10 +649,10 @@ export class AdminTabComponent {
         type: 'success'
       });
       this.isAddingUser = false;
-      this.draftUser = { name: '', email: '', department: '', roleId: 'member' };
       this.render();
     });
 
+    // Role changer dropdown
     this.container.querySelectorAll('.role-changer-select').forEach(sel => {
       sel.addEventListener('change', async () => {
         const userId = sel.getAttribute('data-user-id');
@@ -642,29 +666,7 @@ export class AdminTabComponent {
       });
     });
 
-    // Delete Role Handler
-    this.container.querySelectorAll('.btn-delete-role').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        const roleId = btn.getAttribute('data-role-id');
-        const roleName = btn.getAttribute('data-role-name') || 'این نقش';
-        if (confirm(`آیا از حذف نقش «${roleName}» اطمینان دارید؟ در صورت حذف، کاربران دارای این نقش به سایر نقش‌ها منتقل می‌شوند.`)) {
-          try {
-            await state.deleteRole(roleId);
-            notificationEngine.triggerToast({
-              title: 'نقش حذف شد',
-              message: `نقش «${roleName}» با موفقیت حذف گردید.`,
-              type: 'info'
-            });
-            this.render();
-          } catch (err) {
-            alert(err.message);
-          }
-        }
-      });
-    });
-
-    // Delete User Handler
+    // Delete User
     this.container.querySelectorAll('.btn-delete-user').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
@@ -673,11 +675,6 @@ export class AdminTabComponent {
         if (confirm(`آیا از حذف «${userName}» از سیستم اطمینان دارید؟`)) {
           try {
             await state.deleteUser(userId);
-            notificationEngine.triggerToast({
-              title: 'همکار حذف شد',
-              message: `کاربر «${userName}» با موفقیت حذف شد.`,
-              type: 'info'
-            });
             this.render();
           } catch (err) {
             alert(err.message);
