@@ -245,10 +245,11 @@ export class ProfileModalComponent {
     document.getElementById('btn-unlink-telegram')?.addEventListener('click', async () => {
       if (confirm('آیا مایل به قطع اتصال اکانت تلگرام از سامانه هستید؟')) {
         try {
+          const token = localStorage.getItem('mana_user_token') || localStorage.getItem('token');
           const res = await fetch('/api/profile/telegram', {
             method: 'DELETE',
             headers: {
-              'Authorization': `Bearer ${localStorage.getItem('token')}`
+              'Authorization': `Bearer ${token}`
             }
           });
           const data = await res.json();

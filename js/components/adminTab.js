@@ -516,10 +516,11 @@ export class AdminTabComponent {
         btn.disabled = true;
         btn.innerHTML = 'در حال ارسال...';
         try {
+          const token = localStorage.getItem('mana_user_token') || localStorage.getItem('token');
           const res = await fetch(`/api/deliveries/${delId}/resend/${userId}`, {
             method: 'POST',
             headers: {
-              'Authorization': `Bearer ${localStorage.getItem('token')}`
+              'Authorization': `Bearer ${token}`
             }
           });
           const data = await res.json();
@@ -556,11 +557,12 @@ export class AdminTabComponent {
       submitBtn.innerHTML = 'در حال ارسال بخشنامه...';
 
       try {
+        const token = localStorage.getItem('mana_user_token') || localStorage.getItem('token');
         const res = await fetch('/api/announcements', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
+            'Authorization': `Bearer ${token}`
           },
           body: JSON.stringify({ title, content, targetDepartment, priority })
         });

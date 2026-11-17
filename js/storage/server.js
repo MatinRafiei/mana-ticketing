@@ -122,6 +122,7 @@ export class ServerStorageProvider {
 
     this.token = data.token;
     localStorage.setItem('mana_user_token', this.token);
+    localStorage.setItem('token', this.token);
     this.connectWebSocket();
     this.startFallbackPolling();
     this.subscribePushNotification().catch(e => console.warn('Push registration notice:', e));
@@ -131,6 +132,7 @@ export class ServerStorageProvider {
   logout() {
     this.token = '';
     localStorage.removeItem('mana_user_token');
+    localStorage.removeItem('token');
     this.stopFallbackPolling();
     if (this.ws) {
       this.ws.close();
