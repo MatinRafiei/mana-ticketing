@@ -299,6 +299,7 @@ router.post('/tickets', requireAuth, async (req, res) => {
           userId: targetUid,
           title: `تیکت جدید (${newTicket.id}): ${newTicket.title}`,
           message: `توسط ${req.user.name} ارجاع گردید.\nتوضیحات: ${(newTicket.description || 'بدون توضیح').slice(0, 150)}`,
+          ticketId: newTicket.id,
           priority: newTicket.priority
         });
       }
@@ -408,6 +409,7 @@ router.post('/tickets/:id/replies', requireAuth, async (req, res) => {
         userId: targetUid,
         title: `پاسخ جدید در تیکت ${ticket.id}: ${ticket.title}`,
         message: `${req.user.name}: ${reply.content.slice(0, 150)}`,
+        ticketId: ticket.id,
         priority: ticket.priority
       });
     }
