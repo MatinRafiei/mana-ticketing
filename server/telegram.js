@@ -464,11 +464,11 @@ class TelegramService {
     const chatId = cq.message?.chat?.id;
 
     // No-op (already acknowledged button tapped)
-    if (data === 'noop') {
+    if (data === 'noop' || data.startsWith('noop')) {
       await this.callApi('answerCallbackQuery', {
         callback_query_id: cq.id,
-        text: 'این پیام قبلاً تایید گردیده است.',
-        show_alert: false
+        text: 'ℹ️ این اعلان قبلاً در سامانه تایید گردیده و نیازی به اقدام مجدد ندارد.',
+        show_alert: true
       });
       return;
     }
@@ -592,6 +592,13 @@ class TelegramService {
       } catch (e) {}
       return;
     }
+
+    // Fallback: always answer callback query so Telegram frees the button spinner
+    try {
+      await this.callApi('answerCallbackQuery', {
+        callback_query_id: cq.id
+      });
+    } catch (e) {}
   }
 
   // --- Initialize Draft Session for Multi-Item Reply ---
