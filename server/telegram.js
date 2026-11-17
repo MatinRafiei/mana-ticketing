@@ -18,16 +18,30 @@ class TelegramService {
   }
 
   getAgent() {
-    const proxyUrl = db.data.system_settings.telegram_proxy_url;
-    if (!proxyUrl) return undefined;
+    const rawProxy = (db.data.system_settings.telegram_proxy_url || '').trim();
+    if (!rawProxy) return undefined;
 
     try {
-      if (proxyUrl.startsWith('socks5://') || proxyUrl.startsWith('socks5h://')) {
+      // Normalize proxy URL
+      let proxyUrl = rawProxy;
+      if (!proxyUrl.includes('://')) {
+        proxyUrl = 'http://' + proxyUrl;
+      }
+
+      if (proxyUrl.startsWith('socks5://') || proxyUrl.startsWith('socks5h://') || proxyUrl.startsWith('socks://')) {
         const { SocksProxyAgent } = require('socks-proxy-agent');
-        return new SocksProxyAgent(proxyUrl);
+        // Force remote DNS resolution on SOCKS5 to prevent local DNS poisoning
+        const normalizedSocks = proxyUrl.replace(/^socks5:\/\//, 'socks5h://');
+        return new SocksProxyAgent(normalizedSocks, {
+          timeout: 20000,
+          keepAlive: true
+        });
       } else if (proxyUrl.startsWith('http://') || proxyUrl.startsWith('https://')) {
         const { HttpsProxyAgent } = require('https-proxy-agent');
-        return new HttpsProxyAgent(proxyUrl);
+        return new HttpsProxyAgent(proxyUrl, {
+          timeout: 20000,
+          keepAlive: true
+        });
       }
     } catch (err) {
       console.warn('Proxy agent creation notice:', err.message);
@@ -54,9 +68,10 @@ class TelegramService {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(postData)
+          'Content-Length': Buffer.byteLength(postData),
+          'User-Agent': 'ManaTicketingBot/3.1'
         },
-        timeout: 15000,
+        timeout: 25000,
         agent: agent
       };
 
@@ -78,7 +93,7 @@ class TelegramService {
       });
 
       req.on('error', (err) => {
-        reject(new Error(`خطای ارتباط با تلگرام (${err.message}). در صورت میزبانی روی سرور ایران، فیلد پروکسی را در تنظیمات تکمیل نمایید.`));
+        reject(new Error(`خطای ارتباط با تلگرام (${err.message}). وضعیت اتصال اینترنت یا پروکسی V2Ray سرور را بررسی فرمایید.`));
       });
 
       req.on('timeout', () => {
@@ -140,7 +155,6 @@ class TelegramService {
         }
       });
 
-      // Update recipient status
       db.updateRecipientStatus(deliveryId, userId, {
         status: 'sent',
         telegramMessageId: res.message_id,
@@ -196,7 +210,6 @@ class TelegramService {
         lastSentAt: new Date().toISOString()
       });
 
-      // Broadcast update to dashboards
       this.broadcastWs({
         type: 'delivery_updated',
         deliveryId: deliveryId,
@@ -250,24 +263,21 @@ class TelegramService {
         }
       }
     } catch (err) {
-      // Avoid log spam on proxy delays
       // console.warn('Telegram poll loop notice:', err.message);
     }
 
     if (this.isPolling) {
-      this.pollingTimeout = setTimeout(() => this.pollLoop(), 1000);
+      this.pollingTimeout = setTimeout(() => this.pollLoop(), 1500);
     }
   }
 
   async handleUpdate(update) {
     try {
-      // 1. Handle Inline Button Clicks (Acknowledgment Handshake)
       if (update.callback_query) {
         await this.handleCallbackQuery(update.callback_query);
         return;
       }
 
-      // 2. Handle Text Messages (/start <code>)
       if (update.message && update.message.text) {
         await this.handleTextMessage(update.message);
       }
@@ -294,17 +304,14 @@ class TelegramService {
       day: '2-digit'
     }).format(now);
 
-    // Save acknowledgment in DB
-    const updated = db.acknowledgeDelivery(deliveryId, userId);
+    db.acknowledgeDelivery(deliveryId, userId);
 
-    // 1. Answer popup to user
     await this.callApi('answerCallbackQuery', {
       callback_query_id: cq.id,
       text: '✅ تایید دریافت با موفقیت در سامانه ثبت گردید.',
       show_alert: false
     });
 
-    // 2. Edit message to show confirmed state and disable button
     try {
       const currentText = cq.message.text || '';
       const updatedText = `${currentText}\n\n✅ *تایید شد توسط شما در تاریخ:* ${timeStr}`;
@@ -326,10 +333,9 @@ class TelegramService {
         }
       });
     } catch (e) {
-      // Message editing might fail if already edited or identical
+      // Ignore if identical
     }
 
-    // 3. Broadcast to Superadmin & Manager Dashboards in Real-Time!
     this.broadcastWs({
       type: 'delivery_acknowledged',
       deliveryId,
@@ -345,13 +351,11 @@ class TelegramService {
     const text = msg.text.trim();
     const username = msg.from?.username || msg.from?.first_name || '';
 
-    // Handle /start or /start <code>
     if (text.startsWith('/start')) {
       const parts = text.split(' ');
       const code = parts[1] ? parts[1].trim() : null;
 
       if (code) {
-        // Deep link pairing: /start 123456
         const matchedUser = db.findUserByTelegramAuthCode(code);
         if (matchedUser) {
           db.linkUserTelegram(matchedUser.id, chatId, username);
@@ -375,7 +379,6 @@ class TelegramService {
         }
       }
 
-      // Check if already linked
       const existingUser = db.findUserByTelegramChatId(chatId);
       if (existingUser) {
         await this.callApi('sendMessage', {
@@ -386,7 +389,6 @@ class TelegramService {
         return;
       }
 
-      // Prompt for code
       await this.callApi('sendMessage', {
         chat_id: chatId,
         text: `سلام به سامانه اعلانات و تیکتینگ شرکت مانا خوش آمدید 👋\n\n` +
@@ -400,7 +402,6 @@ class TelegramService {
       return;
     }
 
-    // Direct 6-digit code entry
     if (/^\d{6}$/.test(text)) {
       const matchedUser = db.findUserByTelegramAuthCode(text);
       if (matchedUser) {
@@ -428,7 +429,6 @@ class TelegramService {
       }
     }
 
-    // Default response
     await this.callApi('sendMessage', {
       chat_id: chatId,
       text: `پیام دریافت شد. این ربات صرفاً برای ارسال تیکت‌ها و اعلانات رسمی شرکت مانا پرداز طراحی شده است.`
