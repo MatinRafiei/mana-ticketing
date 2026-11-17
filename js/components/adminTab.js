@@ -174,22 +174,22 @@ export class AdminTabComponent {
 
         <!-- Section 2: Deliveries & Handshake Interaction Tracking -->
         ${this.activeSection === 'deliveries' ? `
-          <div class="space-y-4">
-            <div class="flex items-center justify-between flex-wrap gap-2">
+          <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl overflow-hidden shadow-sm">
+            <div class="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between flex-wrap gap-2">
               <div>
                 <h3 class="text-sm sm:text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
                   <span>✈️ پایش ارسال و تاییدیه دریافت پیام‌ها در تلگرام</span>
-                  <span class="px-2 py-0.5 text-[10px] font-bold bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-full">هندشیک فعال</span>
+                  <span class="px-2 py-0.5 text-[10px] font-bold bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 rounded-full">هندشیک فعال</span>
                 </h3>
-                <p class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">مشاهده لحظه‌ای وضعیت رویت و لمس دکمه «مشاهده شد» توسط پرسنل</p>
+                <p class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5">مشاهده لحظه‌ای وضعیت رویت و لمس دکمه «مشاهده شد» توسط پرسنل</p>
               </div>
-              <button id="btn-refresh-deliveries" class="px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center gap-1.5">
+              <button id="btn-refresh-deliveries" class="px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
                 ${renderIcon('refresh', 'w-3.5 h-3.5')}
                 <span>بروزرسانی وضعیت</span>
               </button>
             </div>
 
-            <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl overflow-hidden shadow-sm">
+            <div>
               ${this.deliveries.length === 0 ? `
                 <div class="p-8 text-center text-slate-400 dark:text-slate-500 text-xs">
                   هنوز اعلانی ثبت نشده است یا در حال بارگذاری داده‌ها می‌باشد.
@@ -226,7 +226,7 @@ export class AdminTabComponent {
                             </div>
 
                             ${r.status !== 'acknowledged' && r.telegramChatId ? `
-                              <button class="btn-resend-reminder px-2 py-1 rounded-lg bg-white dark:bg-slate-800 text-[10px] font-bold text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-700 hover:bg-blue-50 transition shrink-0" data-del-id="${group.id}" data-user-id="${r.userId}">
+                              <button class="btn-resend-reminder px-2 py-1 rounded-lg bg-white dark:bg-slate-800 text-[10px] font-bold text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-700 hover:bg-blue-50 dark:hover:bg-slate-700 transition shrink-0" data-del-id="${group.id}" data-user-id="${r.userId}">
                                 یادآوری فوری
                               </button>
                             ` : ''}

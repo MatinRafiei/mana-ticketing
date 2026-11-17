@@ -26,6 +26,11 @@ html, body {
   touch-action: manipulation;
 }
 
+html.dark, html.dark body {
+  background-color: #020617 !important; /* slate-950 */
+  color: #f1f5f9 !important; /* slate-100 */
+}
+
 /* Hide scrollbar utility for clean horizontal swipe tabs on mobile */
 .no-scrollbar::-webkit-scrollbar {
   display: none;
