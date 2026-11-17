@@ -339,6 +339,67 @@ class TelegramService {
     }
   }
 
+  // --- Auto-Acknowledge All Unconfirmed Deliveries for a Ticket upon Reply ---
+  async autoAcknowledgeTicketDeliveries(ticketId, userId) {
+    try {
+      const user = db.findUserById(userId);
+      const updated = db.acknowledgeTicketDeliveriesForUser(ticketId, userId);
+      if (!updated || updated.length === 0) return;
+
+      const now = new Date();
+      const timeStr = new Intl.DateTimeFormat('fa-IR', {
+        hour: '2-digit',
+        minute: '2-digit',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).format(now);
+
+      for (const item of updated) {
+        // 1. WebSocket broadcast so admin & superadmin panels update immediately
+        this.broadcastWs({
+          type: 'delivery_acknowledged',
+          deliveryId: item.deliveryId,
+          userId: userId,
+          userName: user ? user.name : item.recipient.userName,
+          acknowledgedAt: item.recipient.acknowledgedAt,
+          acknowledgedVia: 'reply',
+          formattedTime: timeStr
+        });
+
+        // 2. If user received a Telegram message for this notification, update its inline button
+        if (item.recipient.telegramChatId && item.recipient.telegramMessageId) {
+          try {
+            await this.callApi('editMessageReplyMarkup', {
+              chat_id: item.recipient.telegramChatId,
+              message_id: item.recipient.telegramMessageId,
+              reply_markup: {
+                inline_keyboard: [
+                  [
+                    {
+                      text: `✅ تایید خودکار با ارسال پاسخ (${timeStr})`,
+                      callback_data: 'noop'
+                    }
+                  ],
+                  [
+                    {
+                      text: '💬 ارسال پاسخ تکمیلی در تلگرام',
+                      callback_data: `start_reply:${ticketId}`
+                    }
+                  ]
+                ]
+              }
+            });
+          } catch (e) {
+            // Ignore Telegram edit errors (message too old or deleted)
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Error in autoAcknowledgeTicketDeliveries:', err.message);
+    }
+  }
+
   // --- Long Polling Worker for User Pairing, Handshake, & Replies ---
   startPolling() {
     if (this.isPolling) return;
@@ -401,6 +462,16 @@ class TelegramService {
   async handleCallbackQuery(cq) {
     const data = cq.data || '';
     const chatId = cq.message?.chat?.id;
+
+    // No-op (already acknowledged button tapped)
+    if (data === 'noop') {
+      await this.callApi('answerCallbackQuery', {
+        callback_query_id: cq.id,
+        text: 'این پیام قبلاً تایید گردیده است.',
+        show_alert: false
+      });
+      return;
+    }
 
     // A: Handshake button click: ack:<deliveryId>:<userId>
     if (data.startsWith('ack:')) {
@@ -722,7 +793,10 @@ class TelegramService {
       ticket
     });
 
-    // 3. Dispatch notifications to other participants
+    // 3. Auto-acknowledge pending delivery handshakes for this ticket for this user
+    await this.autoAcknowledgeTicketDeliveries(ticket.id, user.id);
+
+    // 4. Dispatch notifications to other participants
     const allParticipants = [ticket.creatorId, ticket.assigneeId, ...(ticket.taggedUserIds || [])];
     const notifyIds = Array.from(new Set(allParticipants)).filter(id => id && id !== user.id);
 

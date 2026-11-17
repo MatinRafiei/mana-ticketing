@@ -380,6 +380,9 @@ router.post('/tickets/:id/replies', requireAuth, async (req, res) => {
 
   broadcastWs({ type: 'TICKET_REPLY_ADDED', ticketId: ticket.id, reply, ticket });
 
+  // Auto-acknowledge pending delivery handshakes for this ticket for this user
+  await telegramService.autoAcknowledgeTicketDeliveries(ticket.id, req.user.id);
+
   // Web-Push & Telegram to all participants (creator, assignee, tagged)
   const allParticipants = [ticket.creatorId, ticket.assigneeId, ...(ticket.taggedUserIds || [])];
   const notifyIds = Array.from(new Set(allParticipants)).filter(id => id && id !== req.user.id);

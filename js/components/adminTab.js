@@ -15,14 +15,22 @@ export class AdminTabComponent {
     this.isLoadingDeliveries = false;
     this.draftUser = { name: '', email: '', department: '', roleId: 'member' };
     this.draftRole = { name: '', description: '', permissions: ['create_ticket'] };
+
+    // Auto-refresh deliveries when active tab is deliveries
+    state.subscribe((eventType) => {
+      if (this.activeSection === 'deliveries' && (eventType === 'state_updated' || eventType === 'delivery_acknowledged')) {
+        this.fetchDeliveries();
+      }
+    });
   }
 
   async fetchDeliveries() {
     this.isLoadingDeliveries = true;
     try {
+      const token = localStorage.getItem('mana_user_token') || localStorage.getItem('token');
       const res = await fetch('/api/deliveries', {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${token}`
         }
       });
       if (res.ok) {
@@ -213,7 +221,7 @@ export class AdminTabComponent {
                                 ${r.telegramChatId ? '<span class="text-[10px] text-sky-500" title="دارای تلگرام">✈️</span>' : '<span class="text-[9px] text-slate-400">(فاقد تلگرام)</span>'}
                               </div>
                               <div class="text-[10px] ${r.status === 'acknowledged' ? 'text-emerald-700 dark:text-emerald-300 font-bold' : 'text-amber-700 dark:text-amber-300'}">
-                                ${r.status === 'acknowledged' ? `✅ تایید شد: ${formatRelative(r.acknowledgedAt)}` : `⏳ در انتظار تایید (${toPersianDigits(r.resendCount || 0)} بار یادآوری)`}
+                                ${r.status === 'acknowledged' ? `✅ تایید شد: ${formatRelative(r.acknowledgedAt)}${r.acknowledgedVia === 'reply' ? ' (با ارسال پاسخ)' : ''}` : `⏳ در انتظار تایید (${toPersianDigits(r.resendCount || 0)} بار یادآوری)`}
                               </div>
                             </div>
 

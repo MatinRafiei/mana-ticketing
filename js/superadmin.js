@@ -300,7 +300,7 @@ function renderDeliveries(deliveries) {
                 ${r.telegramChatId ? '<span class="text-[10px] text-sky-400">✈️</span>' : '<span class="text-[9px] text-slate-500">(فاقد تلگرام)</span>'}
               </div>
               <div class="text-[10px] ${r.status === 'acknowledged' ? 'text-emerald-400 font-bold' : 'text-amber-400'}">
-                ${r.status === 'acknowledged' ? `✅ تایید شد: ${formatJalaliTime(r.acknowledgedAt)}` : `⏳ در انتظار تایید (${r.resendCount || 0} بار یادآوری)`}
+                ${r.status === 'acknowledged' ? `✅ تایید شد: ${formatJalaliTime(r.acknowledgedAt)}${r.acknowledgedVia === 'reply' ? ' (با ارسال پاسخ)' : ''}` : `⏳ در انتظار تایید (${r.resendCount || 0} بار یادآوری)`}
               </div>
             </div>
 

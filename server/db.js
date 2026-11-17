@@ -383,11 +383,38 @@ class Database {
     return { group, recipient };
   }
 
-  acknowledgeDelivery(deliveryId, userId) {
+  acknowledgeDelivery(deliveryId, userId, via = 'button') {
     return this.updateRecipientStatus(deliveryId, userId, {
       status: 'acknowledged',
-      acknowledgedAt: new Date().toISOString()
+      acknowledgedAt: new Date().toISOString(),
+      acknowledgedVia: via
     });
+  }
+
+  acknowledgeTicketDeliveriesForUser(ticketId, userId) {
+    if (!ticketId || !userId || !this.data.deliveries) return [];
+    const updated = [];
+
+    this.data.deliveries.forEach(group => {
+      if (group.type === 'ticket' && group.referenceId === ticketId) {
+        const recipient = group.recipients.find(r => r.userId === userId);
+        if (recipient && recipient.status !== 'acknowledged') {
+          recipient.status = 'acknowledged';
+          recipient.acknowledgedAt = new Date().toISOString();
+          recipient.acknowledgedVia = 'reply';
+          updated.push({
+            deliveryId: group.id,
+            groupTitle: group.title,
+            recipient: { ...recipient }
+          });
+        }
+      }
+    });
+
+    if (updated.length > 0) {
+      this.save();
+    }
+    return updated;
   }
 
   // --- Announcements CRUD ---
