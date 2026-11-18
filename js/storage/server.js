@@ -13,7 +13,6 @@ export class ServerStorageProvider {
 
     if (this.token) {
       this.connectWebSocket();
-      this.startFallbackPolling();
     }
   }
 
@@ -72,34 +71,6 @@ export class ServerStorageProvider {
     }
   }
 
-  // --- Smart Fallback Polling (Keeps app 100% updated even if proxy blocks WebSocket) ---
-  startFallbackPolling() {
-    if (this.pollTimer) clearInterval(this.pollTimer);
-    // Poll every 8 seconds if WebSocket is disconnected or proxy is active
-    this.pollTimer = setInterval(async () => {
-      if (!this.token) return;
-      try {
-        const fresh = await this.load();
-        if (fresh) {
-          this.onRemoteUpdate(fresh, 'polling_sync');
-          if (!this.isConnected) {
-            // Server responds via HTTP, indicate alive connection
-            this.onConnectionChange(true);
-          }
-        }
-      } catch (err) {
-        // network issue
-      }
-    }, 8000);
-  }
-
-  stopFallbackPolling() {
-    if (this.pollTimer) {
-      clearInterval(this.pollTimer);
-      this.pollTimer = null;
-    }
-  }
-
   handleSocketEvent(event) {
     this.load().then(freshData => {
       if (freshData) {
@@ -124,7 +95,6 @@ export class ServerStorageProvider {
     localStorage.setItem('mana_user_token', this.token);
     localStorage.setItem('token', this.token);
     this.connectWebSocket();
-    this.startFallbackPolling();
     this.subscribePushNotification().catch(e => console.warn('Push registration notice:', e));
     return data.user;
   }
@@ -133,7 +103,6 @@ export class ServerStorageProvider {
     this.token = '';
     localStorage.removeItem('mana_user_token');
     localStorage.removeItem('token');
-    this.stopFallbackPolling();
     if (this.ws) {
       this.ws.close();
       this.ws = null;
