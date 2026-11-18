@@ -799,7 +799,7 @@ class TelegramService {
     if (userOrChatId && typeof userOrChatId === 'object') {
       user = userOrChatId;
     } else if (userOrChatId) {
-      user = db.findUserByTelegramChatId(userOrChatId);
+      user = db.findUserByTelegramChatId(userOrChatId) || db.findUserById(userOrChatId);
     }
 
     const rows = [
@@ -840,10 +840,7 @@ class TelegramService {
   }
 
   getStandardDepartments() {
-    const list = ['فناوری اطلاعات و زیرساخت', 'توسعه نرم‌افزار', 'پشتیبانی مشتریان', 'مارکتینگ و فروش', 'منابع انسانی و اداری', 'مالی و حسابداری', 'عمومی'];
-    const dynamic = Array.from(new Set(db.data.users.map(u => u.department))).filter(Boolean);
-    const combined = Array.from(new Set([...list, ...dynamic]));
-    return combined.slice(0, 8);
+    return ['مدیریت', 'مهندسی', 'مالی و حسابداری', 'پشتیبانی'];
   }
 
   // --- Start Ticket Creation Wizard ---
@@ -864,7 +861,7 @@ class TelegramService {
       user,
       step: 'AWAITING_TITLE',
       title: '',
-      department: 'عمومی',
+      department: 'مدیریت',
       priority: 'normal',
       assigneeId: null,
       assigneeName: 'عمومی (بدون مسئول اختصاصی)',
@@ -971,16 +968,11 @@ class TelegramService {
     if (!session) return;
 
     session.step = 'AWAITING_ASSIGNEE';
-    const activeUsers = db.data.users.filter(u => !u.isRestricted && u.id !== session.user.id);
-
-    activeUsers.sort((a, b) => {
-      const aDept = a.department === session.department ? 1 : 0;
-      const bDept = b.department === session.department ? 1 : 0;
-      return bDept - aDept;
-    });
+    // Strictly filter active users belonging to the selected department
+    const activeUsers = db.data.users.filter(u => !u.isRestricted && u.department === session.department && u.id !== session.user.id);
 
     const inlineKeyboard = [];
-    const targetUsers = activeUsers.slice(0, 8);
+    const targetUsers = activeUsers.slice(0, 10);
     for (let i = 0; i < targetUsers.length; i += 2) {
       const u1 = targetUsers[i];
       const row = [{ text: `👤 ${u1.name}`, callback_data: `nt_asg:${u1.id}` }];
@@ -997,7 +989,9 @@ class TelegramService {
                  `📌 *عنوان:* ${this.escapeMarkdown(session.title)}\n` +
                  `🏢 *واحد:* ${this.escapeMarkdown(session.department)}\n` +
                  `⚡ *اولویت:* ${this.getPriorityBadge(session.priority)}\n\n` +
-                 `مسئول پیگیری تیکت را انتخاب فرمایید:`;
+                 (activeUsers.length > 0
+                   ? `همکاران واحد «*${this.escapeMarkdown(session.department)}*»:\nمسئول پیگیری تیکت را انتخاب فرمایید:`
+                   : `ℹ️ همکار دیگری در واحد «*${this.escapeMarkdown(session.department)}*» یافت نشد. تیکت به صورت ارجاع عمومی ثبت خواهد شد:`);
 
     if (messageId) {
       try {
@@ -1030,22 +1024,13 @@ class TelegramService {
       session.taggedUserIds = [];
     }
 
-    // Candidate colleagues to tag: exclude creator and selected assignee
+    // Candidate colleagues strictly from the selected department
     const candidateUsers = db.data.users.filter(u => {
       if (u.isRestricted) return false;
       if (u.id === session.user.id) return false;
       if (session.assigneeId && u.id === session.assigneeId) return false;
+      if (u.department !== session.department) return false;
       return true;
-    });
-
-    // Prioritize colleagues in the selected department
-    candidateUsers.sort((a, b) => {
-      const aSelected = session.taggedUserIds.includes(a.id) ? 1 : 0;
-      const bSelected = session.taggedUserIds.includes(b.id) ? 1 : 0;
-      if (bSelected !== aSelected) return bSelected - aSelected;
-      const aDept = a.department === session.department ? 1 : 0;
-      const bDept = b.department === session.department ? 1 : 0;
-      return bDept - aDept;
     });
 
     const inlineKeyboard = [];
@@ -1095,8 +1080,10 @@ class TelegramService {
                  `🏢 *واحد:* ${this.escapeMarkdown(session.department)}\n` +
                  `⚡ *اولویت:* ${this.getPriorityBadge(session.priority)}\n` +
                  `👤 *مسئول:* ${this.escapeMarkdown(session.assigneeName)}\n\n` +
-                 `🏷️ *مطلعین انتخاب‌شده:* ${this.escapeMarkdown(taggedNamesText)}\n\n` +
-                 `👇 _برای انتخاب یا حذف هر همکار، روی نام او ضربه بزنید. پس از اتمام، دکمه تایید را لمس فرمایید:_`;
+                 (candidateUsers.length > 0
+                   ? `🏷️ *مطلعین انتخاب‌شده:* ${this.escapeMarkdown(taggedNamesText)}\n\n` +
+                     `👇 _برای انتخاب یا حذف هر همکار از واحد «${this.escapeMarkdown(session.department)}»، روی نام او ضربه بزنید. پس از اتمام، دکمه تایید را لمس فرمایید:_`
+                   : `ℹ️ همکار دیگری در واحد «${this.escapeMarkdown(session.department)}» جهت تگ کردن وجود ندارد.\nجهت ادامه به مرحله بعد بروید:`);
 
     if (messageId) {
       try {
@@ -1712,7 +1699,7 @@ class TelegramService {
         chat_id: chatId,
         text: `همکار گرامی *${this.escapeMarkdown(user.name)}*،\nشما در حال حاضر تیکت باز یا در انتظاری ندارید. 🎉`,
         parse_mode: 'Markdown',
-        reply_markup: this.getMainMenuKeyboard()
+        reply_markup: this.getMainMenuKeyboard(user || chatId)
       });
       return;
     }
@@ -2040,7 +2027,7 @@ class TelegramService {
                   `همکار گرامی *${matchedUser.name}* (${matchedUser.department})،\n` +
                   `اکنون تمام تیکت‌ها، پاسخ‌ها و اعلانات سازمانی برای شما ارسال می‌شود. همچنین می‌توانید مستقیماً از طریق منوی زیر اقدام به ثبت تیکت جدید فرمایید.`,
             parse_mode: 'Markdown',
-            reply_markup: this.getMainMenuKeyboard()
+            reply_markup: this.getMainMenuKeyboard(matchedUser)
           });
 
           this.broadcastWs({
@@ -2061,7 +2048,7 @@ class TelegramService {
                 `اکانت تلگرام شما متصل است.\n\n` +
                 `از طریق گزینه‌های زیر می‌توانید تیکت جدید ثبت کرده یا تیکت‌های خود را مشاهده و پیگیری نمایید:`,
           parse_mode: 'Markdown',
-          reply_markup: this.getMainMenuKeyboard()
+          reply_markup: this.getMainMenuKeyboard(existingUser)
         });
         return;
       }
@@ -2088,7 +2075,7 @@ class TelegramService {
           chat_id: chatId,
           text: `🎉 *اتصال حساب برقرار شد!*\n\nهمکار گرامی *${matchedUser.name}*، اکانت تلگرام شما با موفقیت به سامانه متصل گردید.`,
           parse_mode: 'Markdown',
-          reply_markup: this.getMainMenuKeyboard()
+          reply_markup: this.getMainMenuKeyboard(matchedUser)
         });
 
         this.broadcastWs({
@@ -2193,7 +2180,7 @@ class TelegramService {
         await this.callApi('sendMessage', {
           chat_id: chatId,
           text: '⏱ مهلت ایجاد تیکت به پایان رسید. جهت شروع مجدد، دکمه «🎫 ثبت تیکت جدید» را لمس کنید.',
-          reply_markup: this.getMainMenuKeyboard()
+          reply_markup: this.getMainMenuKeyboard(chatId)
         });
         return;
       }
@@ -2293,7 +2280,7 @@ class TelegramService {
         await this.callApi('sendMessage', {
           chat_id: chatId,
           text: '⏱ زمان پیش‌نویس منقضی شد. لطفاً مجدداً دکمه «پاسخ به تیکت» را لمس فرمایید.',
-          reply_markup: this.getMainMenuKeyboard()
+          reply_markup: this.getMainMenuKeyboard(chatId)
         });
         return;
       }

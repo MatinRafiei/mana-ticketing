@@ -79,19 +79,18 @@ export class TicketModalComponent {
               <textarea id="ticket-desc" rows="3" required placeholder="جزئیات دقیق کار و نیازمندی‌ها..." class="w-full px-3 py-2 sm:px-3.5 sm:py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none dark:text-white leading-relaxed"></textarea>
             </div>
 
-            <!-- Responsive Columns: Assignee & Priority -->
+            <!-- Responsive Columns: Department & Priority -->
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-              <!-- Assignee -->
+              <!-- Department -->
               <div>
                 <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  ارجاع به (مسئول اصلی) <span class="text-rose-500">*</span>
+                  واحد سازمانی <span class="text-rose-500">*</span>
                 </label>
-                <select id="ticket-assignee" class="w-full px-3 py-2 sm:px-3.5 sm:py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none dark:text-white">
-                  ${users.map(u => `
-                    <option value="${u.id}" ${u.id === defaultAssignee.id ? 'selected' : ''}>
-                      ${u.name} (${u.department})
-                    </option>
-                  `).join('')}
+                <select id="ticket-department" class="w-full px-3 py-2 sm:px-3.5 sm:py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none dark:text-white">
+                  <option value="مدیریت">مدیریت</option>
+                  <option value="مهندسی">مهندسی</option>
+                  <option value="مالی و حسابداری">مالی و حسابداری</option>
+                  <option value="پشتیبانی" selected>پشتیبانی</option>
                 </select>
               </div>
 
@@ -109,21 +108,15 @@ export class TicketModalComponent {
               </div>
             </div>
 
-            <!-- Responsive Columns: Department & Deadline -->
+            <!-- Responsive Columns: Assignee & Deadline -->
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-              <!-- Department -->
+              <!-- Assignee (filtered by selected department) -->
               <div>
                 <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  واحد سازمانی
+                  ارجاع به (مسئول اصلی) <span class="text-rose-500">*</span>
                 </label>
-                <select id="ticket-department" class="w-full px-3 py-2 sm:px-3.5 sm:py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none dark:text-white">
-                  <option value="فناوری اطلاعات و زیرساخت">فناوری اطلاعات و زیرساخت</option>
-                  <option value="توسعه نرم‌افزار">توسعه نرم‌افزار</option>
-                  <option value="پشتیبانی مشتریان و عملیات">پشتیبانی مشتریان و عملیات</option>
-                  <option value="مارکتینگ و فروش">مارکتینگ و فروش</option>
-                  <option value="منابع انسانی و اداری">منابع انسانی و اداری</option>
-                  <option value="مالی و حسابداری">مالی و حسابداری</option>
-                  <option value="عمومی" selected>عمومی</option>
+                <select id="ticket-assignee" class="w-full px-3 py-2 sm:px-3.5 sm:py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none dark:text-white">
+                  <!-- Dynamically populated based on selected department -->
                 </select>
               </div>
 
@@ -136,10 +129,10 @@ export class TicketModalComponent {
               </div>
             </div>
 
-            <!-- Multi-Person Tagging -->
+            <!-- Multi-Person Tagging (Filtered by Department) -->
             <div>
               <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                تگ کردن همکاران دیگر (مطلعین)
+                تگ کردن همکاران دیگر از همین واحد (مطلعین)
               </label>
 
               <!-- Selected Tagged Pills -->
@@ -147,10 +140,7 @@ export class TicketModalComponent {
 
               <!-- Dropdown to add tags -->
               <select id="select-add-tag" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none dark:text-white">
-                <option value="">+ افزودن همکار به لیست تگ‌شده‌ها...</option>
-                ${users.map(u => `
-                  <option value="${u.id}">${u.name} — ${u.department}</option>
-                `).join('')}
+                <!-- Dynamically populated based on selected department -->
               </select>
             </div>
 
@@ -192,8 +182,69 @@ export class TicketModalComponent {
     `;
 
     this.bindEvents();
+    const initialDept = state.currentUser?.department && ['مدیریت', 'مهندسی', 'مالی و حسابداری', 'پشتیبانی'].includes(state.currentUser.department)
+      ? state.currentUser.department
+      : 'پشتیبانی';
+    const deptInput = document.getElementById('ticket-department');
+    if (deptInput) deptInput.value = initialDept;
+    this.updateAssigneeAndTagDropdowns(initialDept);
     this.renderTaggedPills();
     this.renderAttachmentPreviews();
+  }
+
+  updateAssigneeAndTagDropdowns(department) {
+    const assigneeSelect = document.getElementById('ticket-assignee');
+    const tagSelect = document.getElementById('select-add-tag');
+    if (!assigneeSelect || !tagSelect) return;
+
+    // Filter active users belonging strictly to this department
+    const deptUsers = state.users.filter(u => !u.isRestricted && u.department === department);
+
+    // 1. Populate Assignee Select
+    if (deptUsers.length === 0) {
+      assigneeSelect.innerHTML = `<option value="">هیچ کاربری در واحد «${department}» یافت نشد</option>`;
+    } else {
+      const prevVal = assigneeSelect.value;
+      const hasPrev = deptUsers.some(u => u.id === prevVal);
+      const defaultUser = deptUsers.find(u => u.id !== state.currentUser?.id) || deptUsers[0];
+
+      assigneeSelect.innerHTML = deptUsers.map(u => `
+        <option value="${u.id}" ${(hasPrev ? u.id === prevVal : u.id === defaultUser.id) ? 'selected' : ''}>
+          ${u.name} (${u.department})
+        </option>
+      `).join('');
+    }
+
+    const currentAssigneeId = assigneeSelect.value;
+
+    // 2. Remove previously selected tags that are not in this department or is current assignee
+    let pillsChanged = false;
+    for (const tagId of this.selectedTaggedIds) {
+      const u = state.getUser(tagId);
+      if (!u || u.department !== department || u.id === currentAssigneeId) {
+        this.selectedTaggedIds.delete(tagId);
+        pillsChanged = true;
+      }
+    }
+    if (pillsChanged) {
+      this.renderTaggedPills();
+    }
+
+    // 3. Populate Tag Select with only colleagues from this department
+    const availableForTag = deptUsers.filter(u => u.id !== currentAssigneeId && u.id !== state.currentUser?.id && !this.selectedTaggedIds.has(u.id));
+
+    if (availableForTag.length === 0) {
+      tagSelect.innerHTML = `<option value="">همکار دیگری در واحد «${department}» جهت تگ کردن نیست</option>`;
+      tagSelect.disabled = true;
+    } else {
+      tagSelect.disabled = false;
+      tagSelect.innerHTML = `
+        <option value="">+ افزودن همکار از واحد ${department}...</option>
+        ${availableForTag.map(u => `
+          <option value="${u.id}">${u.name}</option>
+        `).join('')}
+      `;
+    }
   }
 
   renderTaggedPills() {
@@ -224,6 +275,8 @@ export class TicketModalComponent {
         const uid = btn.getAttribute('data-user-id');
         this.selectedTaggedIds.delete(uid);
         this.renderTaggedPills();
+        const currentDept = document.getElementById('ticket-department')?.value || 'پشتیبانی';
+        this.updateAssigneeAndTagDropdowns(currentDept);
       });
     });
   }
@@ -263,6 +316,17 @@ export class TicketModalComponent {
     document.getElementById('modal-close-btn')?.addEventListener('click', () => this.close());
     document.getElementById('btn-cancel')?.addEventListener('click', () => this.close());
 
+    const deptSelect = document.getElementById('ticket-department');
+    deptSelect?.addEventListener('change', (e) => {
+      this.updateAssigneeAndTagDropdowns(e.target.value);
+    });
+
+    const assigneeSelect = document.getElementById('ticket-assignee');
+    assigneeSelect?.addEventListener('change', () => {
+      const currentDept = document.getElementById('ticket-department')?.value || 'پشتیبانی';
+      this.updateAssigneeAndTagDropdowns(currentDept);
+    });
+
     const tagSelect = document.getElementById('select-add-tag');
     tagSelect?.addEventListener('change', (e) => {
       const val = e.target.value;
@@ -270,6 +334,8 @@ export class TicketModalComponent {
         this.selectedTaggedIds.add(val);
         e.target.value = '';
         this.renderTaggedPills();
+        const currentDept = document.getElementById('ticket-department')?.value || 'پشتیبانی';
+        this.updateAssigneeAndTagDropdowns(currentDept);
       }
     });
 

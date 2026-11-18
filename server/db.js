@@ -129,6 +129,13 @@ class Database {
       }
     }
 
+const STANDARD_DEPARTMENTS = [
+  'مدیریت',
+  'مهندسی',
+  'مالی و حسابداری',
+  'پشتیبانی'
+];
+
     // Initialize default Manager user if no users exist
     if (!this.data.users || this.data.users.length === 0) {
       this.data.users = [];
@@ -138,7 +145,7 @@ class Database {
         email: 'manager@company.com',
         password_hash: bcrypt.hashSync('123456', salt),
         name: 'مدیر سامانه تیکتینگ',
-        department: 'مدیریت و فناوری',
+        department: 'مدیریت',
         roleId: 'admin',
         avatar: './icons/company_logo.png',
         initials: 'م‌س',
@@ -151,10 +158,31 @@ class Database {
       };
       this.data.users.push(managerUser);
     } else {
-      // Ensure every user has telegramAuthCode
+      // Ensure every user has telegramAuthCode and normalize department
+      const deptMapping = {
+        'مدیریت و فناوری': 'مدیریت',
+        'مدیریت': 'مدیریت',
+        'منابع انسانی و اداری': 'مدیریت',
+        'توسعه نرم‌افزار': 'مهندسی',
+        'فناوری اطلاعات و زیرساخت': 'مهندسی',
+        'مهندسی': 'مهندسی',
+        'مالی و حسابداری': 'مالی و حسابداری',
+        'مالی': 'مالی و حسابداری',
+        'پشتیبانی مشتریان': 'پشتیبانی',
+        'پشتیبانی مشتریان و عملیات': 'پشتیبانی',
+        'پشتیبانی': 'پشتیبانی',
+        'مارکتینگ و فروش': 'پشتیبانی',
+        'عمومی': 'پشتیبانی'
+      };
+
       this.data.users.forEach(u => {
         if (!u.telegramAuthCode) {
           u.telegramAuthCode = this.generateTelegramAuthCode();
+        }
+        if (u.department && deptMapping[u.department]) {
+          u.department = deptMapping[u.department];
+        } else if (!STANDARD_DEPARTMENTS.includes(u.department)) {
+          u.department = 'پشتیبانی';
         }
       });
     }
@@ -522,7 +550,7 @@ class Database {
         email: 'manager@company.com',
         password_hash: bcrypt.hashSync('123456', salt),
         name: 'مدیر سامانه تیکتینگ',
-        department: 'مدیریت و فناوری',
+        department: 'مدیریت',
         roleId: 'admin',
         avatar: './icons/company_logo.png',
         initials: 'م‌س',

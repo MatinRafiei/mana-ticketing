@@ -263,7 +263,10 @@ export class AdminTabComponent {
                     <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">گیرندگان (واحد سازمانی)</label>
                     <select id="ann-dept" class="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs dark:text-white">
                       <option value="all">تمام پرسنل سازمان</option>
-                      ${Array.from(new Set(state.users.map(u => u.department))).filter(Boolean).map(d => `<option value="${d}">${d}</option>`).join('')}
+                      <option value="مدیریت">مدیریت</option>
+                      <option value="مهندسی">مهندسی</option>
+                      <option value="مالی و حسابداری">مالی و حسابداری</option>
+                      <option value="پشتیبانی">پشتیبانی</option>
                     </select>
                   </div>
                   <div>
@@ -410,7 +413,12 @@ export class AdminTabComponent {
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">واحد سازمانی</label>
-                    <input type="text" id="user-dept" placeholder="مثال: فنی و مهندسی" class="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs dark:text-white" />
+                    <select id="user-dept" class="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs dark:text-white">
+                      <option value="مدیریت">مدیریت</option>
+                      <option value="مهندسی">مهندسی</option>
+                      <option value="مالی و حسابداری">مالی و حسابداری</option>
+                      <option value="پشتیبانی" selected>پشتیبانی</option>
+                    </select>
                   </div>
                   <div>
                     <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">نقش سازمانی</label>

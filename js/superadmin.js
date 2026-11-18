@@ -138,12 +138,21 @@ function renderUsersTable(users) {
           <img src="${u.avatar || './icons/company_logo.png'}" class="w-7 h-7 rounded-full object-cover" />
           <span>${u.name}</span>
         </td>
-        <td class="py-3 px-4 font-mono text-slate-300">${u.email}</td>
-        <td class="py-3 px-4 text-slate-400">${u.department || 'عمومی'}</td>
+        <td class="py-3 px-4 font-mono text-slate-300 text-xs">${u.email}</td>
         <td class="py-3 px-4">
-          <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-950 text-blue-300 border border-blue-800">
-            ${roleName}
-          </span>
+          <select class="select-user-dept bg-slate-900 border border-slate-700 hover:border-blue-500 rounded-lg px-2.5 py-1 text-xs text-slate-200 focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer transition" data-id="${u.id}">
+            <option value="مدیریت" ${u.department === 'مدیریت' ? 'selected' : ''}>مدیریت</option>
+            <option value="مهندسی" ${u.department === 'مهندسی' ? 'selected' : ''}>مهندسی</option>
+            <option value="مالی و حسابداری" ${u.department === 'مالی و حسابداری' ? 'selected' : ''}>مالی و حسابداری</option>
+            <option value="پشتیبانی" ${u.department === 'پشتیبانی' ? 'selected' : ''}>پشتیبانی</option>
+          </select>
+        </td>
+        <td class="py-3 px-4">
+          <select class="select-user-role bg-slate-900 border border-slate-700 hover:border-blue-500 rounded-lg px-2.5 py-1 text-xs font-bold text-blue-300 focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer transition" data-id="${u.id}">
+            ${currentRoles.length > 0 ? currentRoles.map(r => `
+              <option value="${r.id}" ${r.id === u.roleId ? 'selected' : ''}>${r.name}</option>
+            `).join('') : `<option value="${u.roleId}">${roleName}</option>`}
+          </select>
         </td>
         <td class="py-3 px-4">
           ${u.telegramChatId ? `
@@ -175,6 +184,64 @@ function renderUsersTable(users) {
       </tr>
     `;
   }).join('');
+
+  // Bind role change dropdown
+  document.querySelectorAll('.select-user-role').forEach(sel => {
+    sel.addEventListener('change', async () => {
+      const id = sel.getAttribute('data-id');
+      const newRoleId = sel.value;
+      sel.disabled = true;
+      try {
+        const res = await fetch(`${API_BASE}/api/superadmin/users/${id}`, {
+          method: 'PUT',
+          headers: authHeaders(),
+          body: JSON.stringify({ roleId: newRoleId })
+        });
+        if (res.ok) {
+          sel.classList.add('ring-2', 'ring-emerald-500');
+          setTimeout(() => sel.classList.remove('ring-2', 'ring-emerald-500'), 1500);
+        } else {
+          const err = await res.json();
+          alert(err.error || 'خطا در تغییر نقش کاربر');
+          fetchUsers();
+        }
+      } catch (e) {
+        alert('خطا در برقراری ارتباط با سرور');
+        fetchUsers();
+      } finally {
+        sel.disabled = false;
+      }
+    });
+  });
+
+  // Bind department change dropdown
+  document.querySelectorAll('.select-user-dept').forEach(sel => {
+    sel.addEventListener('change', async () => {
+      const id = sel.getAttribute('data-id');
+      const newDept = sel.value;
+      sel.disabled = true;
+      try {
+        const res = await fetch(`${API_BASE}/api/superadmin/users/${id}`, {
+          method: 'PUT',
+          headers: authHeaders(),
+          body: JSON.stringify({ department: newDept })
+        });
+        if (res.ok) {
+          sel.classList.add('ring-2', 'ring-emerald-500');
+          setTimeout(() => sel.classList.remove('ring-2', 'ring-emerald-500'), 1500);
+        } else {
+          const err = await res.json();
+          alert(err.error || 'خطا در تغییر واحد کاربر');
+          fetchUsers();
+        }
+      } catch (e) {
+        alert('خطا در برقراری ارتباط با سرور');
+        fetchUsers();
+      } finally {
+        sel.disabled = false;
+      }
+    });
+  });
 
   // Bind restrict buttons
   document.querySelectorAll('.btn-toggle-restrict').forEach(btn => {
@@ -397,6 +464,9 @@ async function fetchRoles() {
       currentRoles = await res.json();
       renderRoles(currentRoles);
       populateRoleSelect(currentRoles);
+      if (currentUsers && currentUsers.length > 0) {
+        renderUsersTable(currentUsers);
+      }
     }
   } catch (e) {
     console.warn('Error fetching roles:', e);
