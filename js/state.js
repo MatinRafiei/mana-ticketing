@@ -250,10 +250,27 @@ class StateManager {
     if (incoming.users) this.users = incoming.users;
     if (incoming.roles) this.roles = incoming.roles;
 
-    if (newNotifications.length > 0) {
+    // Suppress popups on initial synchronization (page load / login)
+    const isInitialLoad = source === 'server_init' || source === 'login';
+
+    if (newNotifications.length > 0 && !isInitialLoad) {
+      // Re-resolve user names if users list was just updated
+      newNotifications.forEach(n => {
+        if (n.message && n.message.includes('کاربر نامشخص')) {
+          const t = incoming.tickets.find(item => item.id === n.ticketId);
+          if (t && t.creatorId) {
+            n.message = n.message.replace('کاربر نامشخص', this.getUserName(t.creatorId));
+          }
+        }
+      });
+
       this.notifications.unshift(...newNotifications);
       this.unreadCount = this.notifications.filter(n => !n.read).length;
       this.emit('instant_notification', newNotifications);
+    } else if (newNotifications.length > 0 && isInitialLoad) {
+      // Still store in notification history quietly without firing alert toasts/sounds
+      this.notifications.unshift(...newNotifications);
+      this.unreadCount = this.notifications.filter(n => !n.read).length;
     }
 
     this.persistLocal();

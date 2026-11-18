@@ -148,6 +148,12 @@ class NotificationEngine {
 
     this.toastContainer.appendChild(toast);
 
+    // Limit visible toasts on screen to at most 3 to avoid screen clutter
+    while (this.toastContainer.children.length > 3) {
+      const oldest = this.toastContainer.children[0];
+      this.dismissToast(oldest);
+    }
+
     // Animate in
     requestAnimationFrame(() => {
       toast.classList.remove('translate-y-6', 'opacity-0');
