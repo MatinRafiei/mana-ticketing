@@ -129,10 +129,10 @@ export class TicketModalComponent {
               </div>
             </div>
 
-            <!-- Multi-Person Tagging (Filtered by Department) -->
+            <!-- Multi-Person Tagging (All Departments) -->
             <div>
               <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                تگ کردن همکاران دیگر از همین واحد (مطلعین)
+                تگ کردن همکاران مطلع (از کلیه واحدها)
               </label>
 
               <!-- Selected Tagged Pills -->
@@ -140,7 +140,7 @@ export class TicketModalComponent {
 
               <!-- Dropdown to add tags -->
               <select id="select-add-tag" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none dark:text-white">
-                <!-- Dynamically populated based on selected department -->
+                <!-- Dynamically populated from all active users across all departments -->
               </select>
             </div>
 
@@ -217,11 +217,11 @@ export class TicketModalComponent {
 
     const currentAssigneeId = assigneeSelect.value;
 
-    // 2. Remove previously selected tags that are not in this department or is current assignee
+    // 2. Remove previously selected tags only if they became the primary assignee or current user
     let pillsChanged = false;
     for (const tagId of this.selectedTaggedIds) {
       const u = state.getUser(tagId);
-      if (!u || u.department !== department || u.id === currentAssigneeId) {
+      if (!u || u.id === currentAssigneeId || u.id === state.currentUser?.id) {
         this.selectedTaggedIds.delete(tagId);
         pillsChanged = true;
       }
@@ -230,18 +230,31 @@ export class TicketModalComponent {
       this.renderTaggedPills();
     }
 
-    // 3. Populate Tag Select with only colleagues from this department
-    const availableForTag = deptUsers.filter(u => u.id !== currentAssigneeId && u.id !== state.currentUser?.id && !this.selectedTaggedIds.has(u.id));
+    // 3. Populate Tag Select with ALL colleagues across the organization
+    const availableForTag = state.users.filter(u => 
+      !u.isRestricted && 
+      u.id !== currentAssigneeId && 
+      u.id !== state.currentUser?.id && 
+      !this.selectedTaggedIds.has(u.id)
+    );
+
+    // Sort: same department first, then by department and name
+    availableForTag.sort((a, b) => {
+      const aSame = a.department === department ? 1 : 0;
+      const bSame = b.department === department ? 1 : 0;
+      if (aSame !== bSame) return bSame - aSame;
+      return (a.department || '').localeCompare(b.department || '') || a.name.localeCompare(b.name);
+    });
 
     if (availableForTag.length === 0) {
-      tagSelect.innerHTML = `<option value="">همکار دیگری در واحد «${department}» جهت تگ کردن نیست</option>`;
+      tagSelect.innerHTML = `<option value="">همکار دیگری جهت تگ کردن یافت نشد</option>`;
       tagSelect.disabled = true;
     } else {
       tagSelect.disabled = false;
       tagSelect.innerHTML = `
-        <option value="">+ افزودن همکار از واحد ${department}...</option>
+        <option value="">+ افزودن همکار به عنوان مطلع (کلیه واحدها)...</option>
         ${availableForTag.map(u => `
-          <option value="${u.id}">${u.name}</option>
+          <option value="${u.id}">${u.name} (${u.department || 'عمومی'})</option>
         `).join('')}
       `;
     }
@@ -262,7 +275,7 @@ export class TicketModalComponent {
       return `
         <span class="inline-flex items-center gap-1.5 bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-xs px-2 py-0.5 rounded-xl font-medium">
           <img src="${u.avatar}" class="w-3.5 h-3.5 rounded-full object-cover" />
-          <span>${u.name}</span>
+          <span>${u.name} <span class="text-[10px] text-blue-500/80 font-normal">(${u.department || 'عمومی'})</span></span>
           <button type="button" class="remove-tag-btn hover:text-rose-500 text-blue-400" data-user-id="${u.id}">
             ${renderIcon('x', 'w-3 h-3')}
           </button>

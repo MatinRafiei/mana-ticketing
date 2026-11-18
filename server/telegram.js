@@ -1024,30 +1024,39 @@ class TelegramService {
       session.taggedUserIds = [];
     }
 
-    // Candidate colleagues strictly from the selected department
+    // Candidate colleagues across ALL departments (excluding creator and assignee)
     const candidateUsers = db.data.users.filter(u => {
       if (u.isRestricted) return false;
       if (u.id === session.user.id) return false;
       if (session.assigneeId && u.id === session.assigneeId) return false;
-      if (u.department !== session.department) return false;
       return true;
     });
 
+    // Sort: same department first, then by department and name
+    candidateUsers.sort((a, b) => {
+      const aSame = a.department === session.department ? 1 : 0;
+      const bSame = b.department === session.department ? 1 : 0;
+      if (aSame !== bSame) return bSame - aSame;
+      return (a.department || '').localeCompare(b.department || '') || a.name.localeCompare(b.name);
+    });
+
     const inlineKeyboard = [];
-    const targetUsers = candidateUsers.slice(0, 10);
+    const targetUsers = candidateUsers.slice(0, 20);
     for (let i = 0; i < targetUsers.length; i += 2) {
       const u1 = targetUsers[i];
       const isU1Tagged = session.taggedUserIds.includes(u1.id);
+      const u1Dept = u1.department ? ` (${u1.department})` : '';
       const row = [{
-        text: `${isU1Tagged ? '✅' : '▫️'} ${u1.name}`,
+        text: `${isU1Tagged ? '✅' : '▫️'} ${u1.name}${u1Dept}`,
         callback_data: `nt_tag:${u1.id}`
       }];
 
       if (targetUsers[i + 1]) {
         const u2 = targetUsers[i + 1];
         const isU2Tagged = session.taggedUserIds.includes(u2.id);
+        const u2Dept = u2.department ? ` (${u2.department})` : '';
         row.push({
-          text: `${isU2Tagged ? '✅' : '▫️'} ${u2.name}`,
+          text: `${isU2Tagged ? '✅' : '▫️'} ${u2.name}${u2Dept}`,
           callback_data: `nt_tag:${u2.id}`
         });
       }
@@ -1071,7 +1080,7 @@ class TelegramService {
     const taggedNamesText = taggedCount > 0
       ? session.taggedUserIds.map(id => {
           const u = db.findUserById(id);
-          return u ? u.name : id;
+          return u ? `${u.name} (${u.department || 'عمومی'})` : id;
         }).join('، ')
       : '_(هیچ کاربری تگ نشده است)_';
 
@@ -1082,8 +1091,8 @@ class TelegramService {
                  `👤 *مسئول:* ${this.escapeMarkdown(session.assigneeName)}\n\n` +
                  (candidateUsers.length > 0
                    ? `🏷️ *مطلعین انتخاب‌شده:* ${this.escapeMarkdown(taggedNamesText)}\n\n` +
-                     `👇 _برای انتخاب یا حذف هر همکار از واحد «${this.escapeMarkdown(session.department)}»، روی نام او ضربه بزنید. پس از اتمام، دکمه تایید را لمس فرمایید:_`
-                   : `ℹ️ همکار دیگری در واحد «${this.escapeMarkdown(session.department)}» جهت تگ کردن وجود ندارد.\nجهت ادامه به مرحله بعد بروید:`);
+                     `👇 _برای انتخاب یا حذف هر همکار (از کلیه واحدها)، روی نام او ضربه بزنید. پس از اتمام، دکمه تایید را لمس فرمایید:_`
+                   : `ℹ️ همکار دیگری جهت تگ کردن یافت نشد.\nجهت ادامه به مرحله بعد بروید:`);
 
     if (messageId) {
       try {
