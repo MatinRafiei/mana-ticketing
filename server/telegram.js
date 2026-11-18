@@ -22,7 +22,7 @@ class TelegramService {
     // { ticketId, statusMessageId, texts: [], attachments: [], expiresAt }
     this.draftSessions = new Map();
     // Maps telegram chatId -> Ticket Creation Wizard Session:
-    // { chatId, user, step, title, department, priority, assigneeId, assigneeName, statusMessageId, descriptionLines, attachments, expiresAt }
+    // { chatId, user, step, title, department, priority, assigneeId, assigneeName, taggedUserIds, statusMessageId, descriptionLines, attachments, expiresAt }
     this.ticketCreationSessions = new Map();
     // Maps telegram chatId -> Announcement Wizard Session:
     // { chatId, user, step, title, content, targetDepartment, priority, statusMessageId, expiresAt }
@@ -648,6 +648,52 @@ class TelegramService {
           session.assigneeId = target ? target.id : null;
           session.assigneeName = target ? `${target.name} (${target.department || 'عمومی'})` : 'عمومی';
         }
+        // If assignee was previously tagged, remove from tagged list
+        if (session.assigneeId && Array.isArray(session.taggedUserIds)) {
+          session.taggedUserIds = session.taggedUserIds.filter(id => id !== session.assigneeId);
+        }
+        await this.callApi('answerCallbackQuery', { callback_query_id: cq.id });
+        await this.sendTaggedUsersSelection(chatId, cq.message?.message_id);
+      } else {
+        await this.callApi('answerCallbackQuery', { callback_query_id: cq.id, text: 'نشست ایجاد تیکت منقضی شده است.', show_alert: true });
+      }
+      return;
+    }
+
+    // G2: Ticket Creation Wizard - Toggle Tagged Colleague: nt_tag:<userId>
+    if (data.startsWith('nt_tag:')) {
+      const tagUserId = data.split(':')[1];
+      const session = this.ticketCreationSessions.get(chatId);
+      if (session) {
+        if (!Array.isArray(session.taggedUserIds)) {
+          session.taggedUserIds = [];
+        }
+        const existingIdx = session.taggedUserIds.indexOf(tagUserId);
+        if (existingIdx >= 0) {
+          session.taggedUserIds.splice(existingIdx, 1);
+          await this.callApi('answerCallbackQuery', {
+            callback_query_id: cq.id,
+            text: 'همکار از لیست مطلعین حذف شد.'
+          });
+        } else {
+          session.taggedUserIds.push(tagUserId);
+          const taggedUser = db.findUserById(tagUserId);
+          await this.callApi('answerCallbackQuery', {
+            callback_query_id: cq.id,
+            text: `✅ ${taggedUser ? taggedUser.name : 'همکار'} تگ شد.`
+          });
+        }
+        await this.sendTaggedUsersSelection(chatId, cq.message?.message_id, true);
+      } else {
+        await this.callApi('answerCallbackQuery', { callback_query_id: cq.id, text: 'نشست ایجاد تیکت منقضی شده است.', show_alert: true });
+      }
+      return;
+    }
+
+    // G3: Ticket Creation Wizard - Tagged Selection Done: nt_tag_done
+    if (data === 'nt_tag_done') {
+      const session = this.ticketCreationSessions.get(chatId);
+      if (session) {
         await this.callApi('answerCallbackQuery', { callback_query_id: cq.id });
         await this.sendNewTicketDraftCard(chatId, cq.message?.message_id);
       } else {
@@ -822,6 +868,7 @@ class TelegramService {
       priority: 'normal',
       assigneeId: null,
       assigneeName: 'عمومی (بدون مسئول اختصاصی)',
+      taggedUserIds: [],
       statusMessageId: null,
       descriptionLines: [],
       attachments: [],
@@ -830,7 +877,7 @@ class TelegramService {
 
     await this.callApi('sendMessage', {
       chat_id: chatId,
-      text: `🎫 *ایجاد تیکت جدید (مرحله ۱ از ۴)*\n\n` +
+      text: `🎫 *ایجاد تیکت جدید (مرحله ۱ از ۵)*\n\n` +
             `همکار گرامی *${this.escapeMarkdown(user.name)}*، لطفاً **عنوان تیکت** خود را بنویسید و ارسال فرمایید:\n\n` +
             `_مثال: عدم اتصال به اینترنت یا درخواست دسترسی به مخزن کد_`,
       parse_mode: 'Markdown',
@@ -862,7 +909,7 @@ class TelegramService {
 
     await this.callApi('sendMessage', {
       chat_id: chatId,
-      text: `🏢 *انتخاب واحد سازمانی (مرحله ۲ از ۴)*\n\n` +
+      text: `🏢 *انتخاب واحد سازمانی (مرحله ۲ از ۵)*\n\n` +
             `📌 *عنوان تیکت:* ${this.escapeMarkdown(session.title)}\n\n` +
             `لطفاً واحد یا دپارتمان مربوطه را انتخاب کنید:`,
       parse_mode: 'Markdown',
@@ -892,7 +939,7 @@ class TelegramService {
       ]
     ];
 
-    const text = `⚡ *تعیین اولویت تیکت (مرحله ۳ از ۴)*\n\n` +
+    const text = `⚡ *تعیین اولویت تیکت (مرحله ۳ از ۵)*\n\n` +
                  `📌 *عنوان:* ${this.escapeMarkdown(session.title)}\n` +
                  `🏢 *واحد:* ${this.escapeMarkdown(session.department)}\n\n` +
                  `میزان فوریت تیکت را تعیین کنید:`;
@@ -946,7 +993,7 @@ class TelegramService {
     inlineKeyboard.push([{ text: '👥 بدون مسئول اختصاصی (ارجاع عمومی)', callback_data: 'nt_asg:none' }]);
     inlineKeyboard.push([{ text: '❌ انصراف', callback_data: 'nt_cancel' }]);
 
-    const text = `👤 *انتخاب مسئول انجام (مرحله ۴ از ۴)*\n\n` +
+    const text = `👤 *انتخاب مسئول انجام (مرحله ۴ از ۵)*\n\n` +
                  `📌 *عنوان:* ${this.escapeMarkdown(session.title)}\n` +
                  `🏢 *واحد:* ${this.escapeMarkdown(session.department)}\n` +
                  `⚡ *اولویت:* ${this.getPriorityBadge(session.priority)}\n\n` +
@@ -973,18 +1020,128 @@ class TelegramService {
     });
   }
 
-  // --- Step 5: Send Interactive Draft Card ---
+  // --- Step 5: Tagged Colleagues Selection (Multi-select Toggle) ---
+  async sendTaggedUsersSelection(chatId, messageId = null, isToggle = false) {
+    const session = this.ticketCreationSessions.get(chatId);
+    if (!session) return;
+
+    session.step = 'AWAITING_TAGGED';
+    if (!Array.isArray(session.taggedUserIds)) {
+      session.taggedUserIds = [];
+    }
+
+    // Candidate colleagues to tag: exclude creator and selected assignee
+    const candidateUsers = db.data.users.filter(u => {
+      if (u.isRestricted) return false;
+      if (u.id === session.user.id) return false;
+      if (session.assigneeId && u.id === session.assigneeId) return false;
+      return true;
+    });
+
+    // Prioritize colleagues in the selected department
+    candidateUsers.sort((a, b) => {
+      const aSelected = session.taggedUserIds.includes(a.id) ? 1 : 0;
+      const bSelected = session.taggedUserIds.includes(b.id) ? 1 : 0;
+      if (bSelected !== aSelected) return bSelected - aSelected;
+      const aDept = a.department === session.department ? 1 : 0;
+      const bDept = b.department === session.department ? 1 : 0;
+      return bDept - aDept;
+    });
+
+    const inlineKeyboard = [];
+    const targetUsers = candidateUsers.slice(0, 10);
+    for (let i = 0; i < targetUsers.length; i += 2) {
+      const u1 = targetUsers[i];
+      const isU1Tagged = session.taggedUserIds.includes(u1.id);
+      const row = [{
+        text: `${isU1Tagged ? '✅' : '▫️'} ${u1.name}`,
+        callback_data: `nt_tag:${u1.id}`
+      }];
+
+      if (targetUsers[i + 1]) {
+        const u2 = targetUsers[i + 1];
+        const isU2Tagged = session.taggedUserIds.includes(u2.id);
+        row.push({
+          text: `${isU2Tagged ? '✅' : '▫️'} ${u2.name}`,
+          callback_data: `nt_tag:${u2.id}`
+        });
+      }
+      inlineKeyboard.push(row);
+    }
+
+    // Bottom action row: Proceed to draft / Skip
+    const taggedCount = session.taggedUserIds.length;
+    if (taggedCount > 0) {
+      inlineKeyboard.push([
+        { text: `➡️ تایید مطلعین (${taggedCount} نفر) و مرحله بعد ✍️`, callback_data: 'nt_tag_done' }
+      ]);
+    } else {
+      inlineKeyboard.push([
+        { text: '⏩ بدون تگ همکاران (ادامه) ➡️', callback_data: 'nt_tag_done' }
+      ]);
+    }
+
+    inlineKeyboard.push([{ text: '❌ انصراف', callback_data: 'nt_cancel' }]);
+
+    const taggedNamesText = taggedCount > 0
+      ? session.taggedUserIds.map(id => {
+          const u = db.findUserById(id);
+          return u ? u.name : id;
+        }).join('، ')
+      : '_(هیچ کاربری تگ نشده است)_';
+
+    const text = `👥 *تگ کردن همکاران مطلع (مرحله ۵ از ۵ - اختیاری)*\n\n` +
+                 `📌 *عنوان تیکت:* ${this.escapeMarkdown(session.title)}\n` +
+                 `🏢 *واحد:* ${this.escapeMarkdown(session.department)}\n` +
+                 `⚡ *اولویت:* ${this.getPriorityBadge(session.priority)}\n` +
+                 `👤 *مسئول:* ${this.escapeMarkdown(session.assigneeName)}\n\n` +
+                 `🏷️ *مطلعین انتخاب‌شده:* ${this.escapeMarkdown(taggedNamesText)}\n\n` +
+                 `👇 _برای انتخاب یا حذف هر همکار، روی نام او ضربه بزنید. پس از اتمام، دکمه تایید را لمس فرمایید:_`;
+
+    if (messageId) {
+      try {
+        await this.callApi('editMessageText', {
+          chat_id: chatId,
+          message_id: messageId,
+          text,
+          parse_mode: 'Markdown',
+          reply_markup: { inline_keyboard: inlineKeyboard }
+        });
+        return;
+      } catch (e) {
+        if (e.message && e.message.includes('message is not modified')) return;
+      }
+    }
+
+    await this.callApi('sendMessage', {
+      chat_id: chatId,
+      text,
+      parse_mode: 'Markdown',
+      reply_markup: { inline_keyboard: inlineKeyboard }
+    });
+  }
+
+  // --- Step 6: Send Interactive Draft Card ---
   async sendNewTicketDraftCard(chatId, messageId = null) {
     const session = this.ticketCreationSessions.get(chatId);
     if (!session) return;
 
     session.step = 'DRAFT_CONTENT';
 
+    const taggedCount = Array.isArray(session.taggedUserIds) ? session.taggedUserIds.length : 0;
+    const taggedNames = taggedCount > 0
+      ? session.taggedUserIds.map(id => {
+          const u = db.findUserById(id);
+          return u ? u.name : id;
+        }).join('، ')
+      : 'ندارد (بدون تگ)';
+
     const draftText = `🎫 *پیش‌نویس تیکت جدید*\n\n` +
                       `📌 *عنوان:* ${this.escapeMarkdown(session.title)}\n` +
                       `🏢 *واحد:* ${this.escapeMarkdown(session.department)}\n` +
                       `⚡ *اولویت:* ${this.getPriorityBadge(session.priority)}\n` +
-                      `👤 *مسئول:* ${this.escapeMarkdown(session.assigneeName)}\n\n` +
+                      `👤 *مسئول:* ${this.escapeMarkdown(session.assigneeName)}\n` +
+                      `👥 *مطلعین (تگ‌شده):* ${this.escapeMarkdown(taggedNames)}\n\n` +
                       `📝 *شرح و توضیحات تیکت:*\n` +
                       `_(هنوز متنی وارد نشده است)_\n\n` +
                       `📎 *فایل‌های پیوست:* (۰ فایل)\n\n` +
@@ -1044,11 +1201,20 @@ class TelegramService {
       }).join('\n');
     }
 
+    const taggedCount = Array.isArray(session.taggedUserIds) ? session.taggedUserIds.length : 0;
+    const taggedNames = taggedCount > 0
+      ? session.taggedUserIds.map(id => {
+          const u = db.findUserById(id);
+          return u ? u.name : id;
+        }).join('، ')
+      : 'ندارد (بدون تگ)';
+
     const draftText = `🎫 *پیش‌نویس تیکت جدید*\n\n` +
                       `📌 *عنوان:* ${this.escapeMarkdown(session.title)}\n` +
                       `🏢 *واحد:* ${this.escapeMarkdown(session.department)}\n` +
                       `⚡ *اولویت:* ${this.getPriorityBadge(session.priority)}\n` +
-                      `👤 *مسئول:* ${this.escapeMarkdown(session.assigneeName)}\n\n` +
+                      `👤 *مسئول:* ${this.escapeMarkdown(session.assigneeName)}\n` +
+                      `👥 *مطلعین (تگ‌شده):* ${this.escapeMarkdown(taggedNames)}\n\n` +
                       `📝 *شرح و توضیحات تیکت:*\n` +
                       `${textPreview}\n\n` +
                       `📎 *پیوست‌ها (${session.attachments.length} عدد):*\n` +
@@ -1095,13 +1261,21 @@ class TelegramService {
 
     const user = session.user;
     const finalDesc = session.descriptionLines.join('\n\n') || session.title;
+    const taggedUserIds = Array.isArray(session.taggedUserIds) ? session.taggedUserIds : [];
+    const taggedCount = taggedUserIds.length;
+    const taggedNames = taggedCount > 0
+      ? taggedUserIds.map(id => {
+          const u = db.findUserById(id);
+          return u ? u.name : id;
+        }).join('، ')
+      : 'ندارد';
 
     const newTicket = db.createTicket({
       title: session.title,
       description: finalDesc,
       creatorId: user.id,
       assigneeId: session.assigneeId,
-      taggedUserIds: [],
+      taggedUserIds: taggedUserIds,
       priority: session.priority,
       status: 'open',
       department: session.department,
@@ -1130,6 +1304,7 @@ class TelegramService {
               `🏢 *واحد:* ${this.escapeMarkdown(newTicket.department)}\n` +
               `⚡ *اولویت:* ${this.getPriorityBadge(newTicket.priority)}\n` +
               `👤 *مسئول:* ${this.escapeMarkdown(session.assigneeName)}\n` +
+              `👥 *مطلعین:* ${this.escapeMarkdown(taggedNames)}\n` +
               `📎 *پیوست‌ها:* ${newTicket.attachments.length} فایل\n\n` +
               `⚡️ این تیکت در لحظه روی سامانه وب تیکتینگ برای همکاران قابل مشاهده شد.`,
         parse_mode: 'Markdown',
@@ -1148,9 +1323,9 @@ class TelegramService {
     });
 
     // 3. Dispatch Web-Push & Telegram Notification with Handshake to Assignee
+    const pushService = require('./push');
     if (newTicket.assigneeId && newTicket.assigneeId !== user.id) {
       try {
-        const pushService = require('./push');
         pushService.sendToUsers([newTicket.assigneeId], {
           title: `تیکت جدید: ${newTicket.title}`,
           body: `توسط ${user.name} (از تلگرام) ارجاع گردید.`,
@@ -1176,7 +1351,44 @@ class TelegramService {
           priority: newTicket.priority
         });
       } catch (err) {
-        console.warn('Notification dispatch error for new ticket:', err.message);
+        console.warn('Notification dispatch error for new ticket assignee:', err.message);
+      }
+    }
+
+    // 4. Dispatch Web-Push & Telegram Notification with Handshake to Tagged Colleagues
+    if (taggedUserIds.length > 0) {
+      const validTagged = taggedUserIds.filter(id => id && id !== user.id && id !== newTicket.assigneeId);
+      if (validTagged.length > 0) {
+        try {
+          pushService.sendToUsers(validTagged, {
+            title: `تگ در تیکت جدید: ${newTicket.title}`,
+            body: `توسط ${user.name} به عنوان همکار مطلع تگ شدید.`,
+            ticketId: newTicket.id,
+            url: `./?ticket=${newTicket.id}`
+          });
+
+          for (const taggedId of validTagged) {
+            const delivery = db.createDelivery({
+              type: 'ticket',
+              referenceId: newTicket.id,
+              title: `تگ در تیکت (${newTicket.id}): ${newTicket.title}`,
+              message: `توسط ${user.name} به عنوان همکار مطلع در این تیکت تگ شدید.\nمسئول تیکت: ${session.assigneeName}\nتوضیحات: ${(newTicket.description || '').slice(0, 150)}`,
+              targetUserIds: [taggedId],
+              creatorId: user.id
+            });
+
+            await this.sendNotificationWithHandshake({
+              deliveryId: delivery.id,
+              userId: taggedId,
+              title: `تگ در تیکت (${newTicket.id}): ${newTicket.title}`,
+              message: `توسط ${user.name} به عنوان همکار مطلع در این تیکت تگ شدید.\nمسئول تیکت: ${session.assigneeName}\nتوضیحات: ${(newTicket.description || '').slice(0, 150)}`,
+              ticketId: newTicket.id,
+              priority: newTicket.priority
+            });
+          }
+        } catch (err) {
+          console.warn('Notification dispatch error for new ticket tagged users:', err.message);
+        }
       }
     }
   }
