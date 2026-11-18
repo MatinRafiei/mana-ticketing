@@ -141,6 +141,64 @@ class App {
           });
       });
     }
+
+    // Capture PWA Install Prompt for Android Chrome & Desktop
+    let deferredPrompt = null;
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      window.deferredPWAInstallPrompt = e;
+
+      // Show in-app install banner if not dismissed before
+      if (!localStorage.getItem('pwa_prompt_dismissed')) {
+        this.showInstallBanner(e);
+      }
+    });
+
+    window.addEventListener('appinstalled', () => {
+      console.log('PWA installed successfully.');
+      deferredPrompt = null;
+      window.deferredPWAInstallPrompt = null;
+      document.getElementById('pwa-install-banner')?.remove();
+    });
+  }
+
+  showInstallBanner(promptEvent) {
+    if (document.getElementById('pwa-install-banner')) return;
+
+    const banner = document.createElement('div');
+    banner.id = 'pwa-install-banner';
+    banner.className = 'fixed top-16 inset-x-3 sm:inset-x-auto sm:left-6 z-50 bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-3.5 rounded-2xl shadow-2xl flex items-center justify-between gap-3 border border-white/20 animate-in fade-in slide-in-from-top-4 duration-300 max-w-md';
+
+    banner.innerHTML = `
+      <div class="flex items-center gap-2.5 min-w-0">
+        <img src="/icons/company_logo.png" class="w-9 h-9 rounded-xl bg-white p-0.5 object-contain shrink-0" />
+        <div class="min-w-0">
+          <h4 class="font-bold text-xs">نصب اپلیکیشن تیکتینگ</h4>
+          <p class="text-[10px] text-blue-100 truncate">دسترسی سریع و تمام‌صفحه بدون مرورگر</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-1.5 shrink-0">
+        <button id="btn-pwa-dismiss" class="text-white/70 hover:text-white px-2 py-1 text-xs">بعداً</button>
+        <button id="btn-pwa-install" class="px-3 py-1.5 bg-white text-blue-700 hover:bg-blue-50 font-bold text-xs rounded-xl shadow-sm transition transform active:scale-95">نصب</button>
+      </div>
+    `;
+
+    document.body.appendChild(banner);
+
+    document.getElementById('btn-pwa-install')?.addEventListener('click', async () => {
+      if (promptEvent) {
+        promptEvent.prompt();
+        const { outcome } = await promptEvent.userChoice;
+        console.log('PWA Install choice:', outcome);
+        banner.remove();
+      }
+    });
+
+    document.getElementById('btn-pwa-dismiss')?.addEventListener('click', () => {
+      localStorage.setItem('pwa_prompt_dismissed', 'true');
+      banner.remove();
+    });
   }
 }
 

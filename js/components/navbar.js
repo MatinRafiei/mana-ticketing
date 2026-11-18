@@ -184,6 +184,11 @@ export class NavbarComponent {
                       <span>پروفایل و مشخصات من</span>
                     </button>
 
+                    <button id="btn-install-pwa-menu" class="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition">
+                      ${renderIcon('download', 'w-4 h-4 text-emerald-500')}
+                      <span>نصب اپلیکیشن روی گوشی (PWA)</span>
+                    </button>
+
                     <button id="btn-dropdown-admin" class="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/50 transition">
                       ${renderIcon('shield', 'w-4 h-4 text-indigo-500')}
                       <span>مدیریت تیکت‌ها و نقش‌ها</span>
@@ -293,6 +298,21 @@ export class NavbarComponent {
       this.isUserMenuOpen = false;
       if (confirm('آیا مایل به خروج از حساب کاربری هستید؟')) {
         state.logout();
+      }
+    });
+
+    // PWA Install Button in User Menu
+    document.getElementById('btn-install-pwa-menu')?.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      this.isUserMenuOpen = false;
+      this.render();
+
+      if (window.deferredPWAInstallPrompt) {
+        window.deferredPWAInstallPrompt.prompt();
+        const { outcome } = await window.deferredPWAInstallPrompt.userChoice;
+        console.log('PWA User choice from menu:', outcome);
+      } else {
+        alert('برای نصب اپلیکیشن:\nدر مرورگر کروم دکمه سه نقطه (⋮) بالای صفحه را بزنید و گزینه «افزودن به صفحه اصلی» یا «Install app» را انتخاب فرمایید.');
       }
     });
 
