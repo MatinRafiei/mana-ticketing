@@ -610,4 +610,140 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-cancel-add-user')?.addEventListener('click', () => {
     document.getElementById('box-add-user').classList.add('hidden');
   });
+
+  // ===================================================================
+  // CHANGE SUPERADMIN PASSWORD MODAL
+  // ===================================================================
+  const pwdModal = document.getElementById('modal-change-password');
+  const pwdAlert = document.getElementById('pwd-modal-alert');
+  const formChangePwd = document.getElementById('form-change-password');
+
+  const openPwdModal = () => {
+    pwdAlert?.classList.add('hidden');
+    formChangePwd?.reset();
+    pwdModal?.classList.remove('hidden');
+    pwdModal?.classList.add('flex');
+    document.getElementById('input-curr-pwd')?.focus();
+  };
+
+  const closePwdModal = () => {
+    pwdModal?.classList.add('hidden');
+    pwdModal?.classList.remove('flex');
+  };
+
+  document.getElementById('btn-open-pwd-modal')?.addEventListener('click', openPwdModal);
+  document.getElementById('btn-close-pwd-modal')?.addEventListener('click', closePwdModal);
+  document.getElementById('btn-cancel-pwd')?.addEventListener('click', closePwdModal);
+
+  formChangePwd?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const curr = document.getElementById('input-curr-pwd').value;
+    const next = document.getElementById('input-new-pwd').value;
+    const confirm = document.getElementById('input-confirm-pwd').value;
+    const submitBtn = document.getElementById('btn-submit-pwd');
+
+    if (next !== confirm) {
+      pwdAlert.className = 'p-3 rounded-xl text-xs bg-rose-950/70 border border-rose-800 text-rose-300';
+      pwdAlert.textContent = 'رمز عبور جدید با تکرار آن همخوانی ندارد.';
+      pwdAlert.classList.remove('hidden');
+      return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'در حال ذخیره...';
+    pwdAlert.classList.add('hidden');
+
+    try {
+      const res = await fetch(`${API_BASE}/api/superadmin/change-password`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ currentPassword: curr, newPassword: next })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert('رمز عبور مدیر ارشد با موفقیت تغییر یافت. لطفاً با رمز جدید مجدداً وارد شوید.');
+        closePwdModal();
+        localStorage.removeItem('mana_superadmin_token');
+        authToken = '';
+        showLogin();
+      } else {
+        pwdAlert.className = 'p-3 rounded-xl text-xs bg-rose-950/70 border border-rose-800 text-rose-300';
+        pwdAlert.textContent = data.error || 'خطا در تغییر رمز عبور';
+        pwdAlert.classList.remove('hidden');
+      }
+    } catch (err) {
+      pwdAlert.className = 'p-3 rounded-xl text-xs bg-rose-950/70 border border-rose-800 text-rose-300';
+      pwdAlert.textContent = 'خطای ارتباط با سرور: ' + err.message;
+      pwdAlert.classList.remove('hidden');
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'ذخیره رمز جدید';
+    }
+  });
+
+  // ===================================================================
+  // FACTORY RESET MODAL & WORKFLOW
+  // ===================================================================
+  const resetModal = document.getElementById('modal-factory-reset');
+  const resetAlert = document.getElementById('reset-modal-alert');
+  const formFactoryReset = document.getElementById('form-factory-reset');
+
+  const openResetModal = () => {
+    resetAlert?.classList.add('hidden');
+    formFactoryReset?.reset();
+    resetModal?.classList.remove('hidden');
+    resetModal?.classList.add('flex');
+    document.getElementById('input-reset-pwd')?.focus();
+  };
+
+  const closeResetModal = () => {
+    resetModal?.classList.add('hidden');
+    resetModal?.classList.remove('flex');
+  };
+
+  document.getElementById('btn-open-factory-reset')?.addEventListener('click', openResetModal);
+  document.getElementById('btn-close-reset-modal')?.addEventListener('click', closeResetModal);
+  document.getElementById('btn-cancel-reset')?.addEventListener('click', closeResetModal);
+
+  formFactoryReset?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const confirmPassword = document.getElementById('input-reset-pwd').value;
+    const submitBtn = document.getElementById('btn-submit-reset');
+
+    if (!confirm('آیا از بازنشانی کامل پایگاه داده و حذف کلیه تیکت‌ها و داده‌ها اطمینان قطعی دارید؟')) {
+      return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'در حال بازنشانی...';
+    resetAlert.classList.add('hidden');
+
+    try {
+      const res = await fetch(`${API_BASE}/api/superadmin/factory-reset`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ confirmPassword })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert('سامانه با موفقیت به نقطه صفر کارخانه بازنشانی گردید.');
+        closeResetModal();
+        // Clear all cached tokens & redirect
+        localStorage.clear();
+        sessionStorage.clear();
+        window.location.reload();
+      } else {
+        resetAlert.className = 'p-3 rounded-xl text-xs bg-rose-950/70 border border-rose-800 text-rose-300';
+        resetAlert.textContent = data.error || 'خطا در بازنشانی کارخانه';
+        resetAlert.classList.remove('hidden');
+      }
+    } catch (err) {
+      resetAlert.className = 'p-3 rounded-xl text-xs bg-rose-950/70 border border-rose-800 text-rose-300';
+      resetAlert.textContent = 'خطای ارتباط با سرور: ' + err.message;
+      resetAlert.classList.remove('hidden');
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'تایید نهایی و ریست فاکتوری';
+    }
+  });
 });
