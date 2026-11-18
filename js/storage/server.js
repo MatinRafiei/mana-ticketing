@@ -243,16 +243,38 @@ export class ServerStorageProvider {
     return data;
   }
 
-  async addReply(ticketId, content, attachments, statusChange) {
-    if (statusChange) {
-      await this.updateTicket(ticketId, { status: statusChange });
+  async addReply(ticketId, contentOrReplyData, attachments = [], statusChange = null) {
+    let content = '';
+    let atts = [];
+    let status = statusChange;
+
+    if (contentOrReplyData && typeof contentOrReplyData === 'object' && !Array.isArray(contentOrReplyData)) {
+      content = contentOrReplyData.content || '';
+      atts = contentOrReplyData.attachments || [];
+      status = contentOrReplyData.statusChange || statusChange;
+    } else {
+      content = contentOrReplyData || '';
+      atts = attachments || [];
     }
+
+    if (status) {
+      await this.updateTicket(ticketId, { status });
+    }
+
     const res = await fetch(`${this.apiBase}/api/tickets/${ticketId}/replies`, {
       method: 'POST',
       headers: this.getHeaders(),
-      body: JSON.stringify({ content, attachments })
+      body: JSON.stringify({ content, attachments: atts })
     });
-    const data = await res.json();
+
+    const text = await res.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      throw new Error(`پاسخ نامعتبر از سرور (${res.status}): ${text.slice(0, 80)}`);
+    }
+
     if (!res.ok) throw new Error(data.error || 'خطا در ثبت پاسخ');
     return data;
   }

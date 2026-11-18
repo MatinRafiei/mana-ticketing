@@ -407,13 +407,24 @@ class StateManager {
     this.emit('state_updated');
   }
 
-  async addReply(ticketId, content, attachments = []) {
+  async addReply(ticketId, content, attachments = [], statusChange = null) {
     const ticket = this.tickets.find(t => t.id === ticketId);
     if (!ticket) return;
 
+    if (statusChange && statusChange !== ticket.status) {
+      ticket.status = statusChange;
+      ticket.history.push({
+        action: 'STATUS_CHANGE',
+        from: ticket.status,
+        to: statusChange,
+        actorId: this.currentUser?.id || 'u_manager_1',
+        timestamp: new Date().toISOString()
+      });
+    }
+
     let reply;
     if (this.serverProvider.isLoggedIn()) {
-      reply = await this.serverProvider.addReply(ticketId, { content, attachments });
+      reply = await this.serverProvider.addReply(ticketId, content, attachments, statusChange);
     } else {
       reply = {
         id: `rep-${Date.now()}`,

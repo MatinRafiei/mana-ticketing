@@ -344,67 +344,82 @@ router.put('/tickets/:id', requireAuth, async (req, res) => {
 
 // Add Reply to Ticket
 router.post('/tickets/:id/replies', requireAuth, async (req, res) => {
-  const ticket = db.data.tickets.find(t => t.id === req.params.id);
-  if (!ticket) return res.status(404).json({ error: 'تیکت یافت نشد.' });
+  try {
+    const ticket = db.data.tickets.find(t => t.id === req.params.id);
+    if (!ticket) return res.status(404).json({ error: 'تیکت یافت نشد.' });
 
-  const { content, attachments } = req.body;
-  if (!content && (!attachments || attachments.length === 0)) {
-    return res.status(400).json({ error: 'متن پاسخ یا فایل پیوست الزامی است.' });
-  }
-
-  const reply = {
-    id: 'rep_' + Date.now(),
-    authorId: req.user.id,
-    content: (content || '').trim(),
-    attachments: attachments || [],
-    createdAt: new Date().toISOString()
-  };
-
-  ticket.replies.push(reply);
-  ticket.updatedAt = new Date().toISOString();
-  db.save();
-
-  broadcastWs({ type: 'TICKET_REPLY_ADDED', ticketId: ticket.id, reply, ticket });
-
-  // Auto-acknowledge pending delivery handshakes for this ticket for this user
-  await telegramService.autoAcknowledgeTicketDeliveries(ticket.id, req.user.id);
-
-  // Web-Push & Telegram to all participants (creator, assignee, tagged)
-  const allParticipants = [ticket.creatorId, ticket.assigneeId, ...(ticket.taggedUserIds || [])];
-  const notifyIds = Array.from(new Set(allParticipants)).filter(id => id && id !== req.user.id);
-
-  if (notifyIds.length > 0) {
-    // 1. Web-Push
-    pushService.sendToUsers(notifyIds, {
-      title: `پاسخ جدید در تیکت: ${ticket.title}`,
-      body: `${req.user.name}: ${reply.content.slice(0, 70)}...`,
-      ticketId: ticket.id,
-      url: `./?ticket=${ticket.id}`
-    });
-
-    // 2. Telegram Handshake
-    const delivery = db.createDelivery({
-      type: 'ticket',
-      referenceId: ticket.id,
-      title: `پاسخ جدید در تیکت ${ticket.id}: ${ticket.title}`,
-      message: `${req.user.name}: ${reply.content.slice(0, 150)}`,
-      targetUserIds: notifyIds,
-      creatorId: req.user.id
-    });
-
-    for (const targetUid of notifyIds) {
-      await telegramService.sendNotificationWithHandshake({
-        deliveryId: delivery.id,
-        userId: targetUid,
-        title: `پاسخ جدید در تیکت ${ticket.id}: ${ticket.title}`,
-        message: `${req.user.name}: ${reply.content.slice(0, 150)}`,
-        ticketId: ticket.id,
-        priority: ticket.priority
-      });
+    const { content, attachments } = req.body;
+    if (!content && (!attachments || attachments.length === 0)) {
+      return res.status(400).json({ error: 'متن پاسخ یا فایل پیوست الزامی است.' });
     }
-  }
 
-  res.json(reply);
+    const reply = {
+      id: 'rep_' + Date.now(),
+      authorId: req.user.id,
+      content: (content || '').trim(),
+      attachments: attachments || [],
+      createdAt: new Date().toISOString()
+    };
+
+    ticket.replies.push(reply);
+    ticket.updatedAt = new Date().toISOString();
+    db.save();
+
+    broadcastWs({ type: 'TICKET_REPLY_ADDED', ticketId: ticket.id, reply, ticket });
+
+    // Auto-acknowledge pending delivery handshakes for this ticket for this user
+    try {
+      await telegramService.autoAcknowledgeTicketDeliveries(ticket.id, req.user.id);
+    } catch (e) {
+      console.warn('Auto ack error on reply:', e.message);
+    }
+
+    // Web-Push & Telegram to all participants (creator, assignee, tagged)
+    const allParticipants = [ticket.creatorId, ticket.assigneeId, ...(ticket.taggedUserIds || [])];
+    const notifyIds = Array.from(new Set(allParticipants)).filter(id => id && id !== req.user.id);
+
+    if (notifyIds.length > 0) {
+      // 1. Web-Push
+      try {
+        pushService.sendToUsers(notifyIds, {
+          title: `پاسخ جدید در تیکت: ${ticket.title}`,
+          body: `${req.user.name}: ${reply.content.slice(0, 70)}...`,
+          ticketId: ticket.id,
+          url: `./?ticket=${ticket.id}`
+        });
+      } catch (e) {}
+
+      // 2. Telegram Handshake
+      try {
+        const delivery = db.createDelivery({
+          type: 'ticket',
+          referenceId: ticket.id,
+          title: `پاسخ جدید در تیکت ${ticket.id}: ${ticket.title}`,
+          message: `${req.user.name}: ${reply.content.slice(0, 150)}`,
+          targetUserIds: notifyIds,
+          creatorId: req.user.id
+        });
+
+        for (const targetUid of notifyIds) {
+          await telegramService.sendNotificationWithHandshake({
+            deliveryId: delivery.id,
+            userId: targetUid,
+            title: `پاسخ جدید در تیکت ${ticket.id}: ${ticket.title}`,
+            message: `${req.user.name}: ${reply.content.slice(0, 150)}`,
+            ticketId: ticket.id,
+            priority: ticket.priority
+          });
+        }
+      } catch (e) {
+        console.warn('Telegram handshake error on reply:', e.message);
+      }
+    }
+
+    res.json(reply);
+  } catch (err) {
+    console.error('Error adding reply:', err);
+    res.status(500).json({ error: 'خطای داخلی سرور در ثبت پاسخ: ' + err.message });
+  }
 });
 
 // Delete Ticket
