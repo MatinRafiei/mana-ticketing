@@ -21,6 +21,9 @@ class TelegramService {
     // Maps telegram chatId -> Draft Session Object:
     // { ticketId, statusMessageId, texts: [], attachments: [], expiresAt }
     this.draftSessions = new Map();
+    // Maps telegram chatId -> Ticket Creation Wizard Session:
+    // { chatId, user, step, title, department, priority, assigneeId, assigneeName, statusMessageId, descriptionLines, attachments, expiresAt }
+    this.ticketCreationSessions = new Map();
   }
 
   setBroadcast(fn) {
@@ -593,12 +596,577 @@ class TelegramService {
       return;
     }
 
+    // E: Ticket Creation Wizard - Department Selected
+    if (data.startsWith('nt_dept:')) {
+      const idx = parseInt(data.split(':')[1], 10);
+      const session = this.ticketCreationSessions.get(chatId);
+      if (session) {
+        const depts = this.getStandardDepartments();
+        session.department = depts[idx] || 'عمومی';
+        await this.callApi('answerCallbackQuery', { callback_query_id: cq.id });
+        await this.sendPrioritySelection(chatId, cq.message?.message_id);
+      } else {
+        await this.callApi('answerCallbackQuery', { callback_query_id: cq.id, text: 'نشست ایجاد تیکت منقضی شده است.', show_alert: true });
+      }
+      return;
+    }
+
+    // F: Ticket Creation Wizard - Priority Selected
+    if (data.startsWith('nt_pri:')) {
+      const pri = data.split(':')[1];
+      const session = this.ticketCreationSessions.get(chatId);
+      if (session) {
+        session.priority = pri;
+        await this.callApi('answerCallbackQuery', { callback_query_id: cq.id });
+        await this.sendAssigneeSelection(chatId, cq.message?.message_id);
+      } else {
+        await this.callApi('answerCallbackQuery', { callback_query_id: cq.id, text: 'نشست ایجاد تیکت منقضی شده است.', show_alert: true });
+      }
+      return;
+    }
+
+    // G: Ticket Creation Wizard - Assignee Selected
+    if (data.startsWith('nt_asg:')) {
+      const asgId = data.split(':')[1];
+      const session = this.ticketCreationSessions.get(chatId);
+      if (session) {
+        if (asgId === 'none') {
+          session.assigneeId = null;
+          session.assigneeName = 'عمومی (بدون مسئول اختصاصی)';
+        } else {
+          const target = db.findUserById(asgId);
+          session.assigneeId = target ? target.id : null;
+          session.assigneeName = target ? `${target.name} (${target.department || 'عمومی'})` : 'عمومی';
+        }
+        await this.callApi('answerCallbackQuery', { callback_query_id: cq.id });
+        await this.sendNewTicketDraftCard(chatId, cq.message?.message_id);
+      } else {
+        await this.callApi('answerCallbackQuery', { callback_query_id: cq.id, text: 'نشست ایجاد تیکت منقضی شده است.', show_alert: true });
+      }
+      return;
+    }
+
+    // H: Ticket Creation Wizard - Final Submit
+    if (data === 'nt_submit') {
+      await this.submitNewTicket(chatId, cq.id);
+      return;
+    }
+
+    // I: Ticket Creation Wizard - Cancel
+    if (data === 'nt_cancel') {
+      this.ticketCreationSessions.delete(chatId);
+      await this.callApi('answerCallbackQuery', {
+        callback_query_id: cq.id,
+        text: 'ایجاد تیکت لغو شد.'
+      });
+      try {
+        await this.callApi('editMessageText', {
+          chat_id: cq.message.chat.id,
+          message_id: cq.message.message_id,
+          text: '❌ *عملیات ایجاد تیکت جدید لغو شد.*',
+          parse_mode: 'Markdown'
+        });
+      } catch (e) {}
+      return;
+    }
+
     // Fallback: always answer callback query so Telegram frees the button spinner
     try {
       await this.callApi('answerCallbackQuery', {
         callback_query_id: cq.id
       });
     } catch (e) {}
+  }
+
+  // --- Persistent Main Menu Reply Keyboard ---
+  getMainMenuKeyboard() {
+    return {
+      keyboard: [
+        [{ text: '🎫 ثبت تیکت جدید' }],
+        [{ text: '📋 تیکت‌های من' }, { text: '❓ راهنما و وضعیت' }]
+      ],
+      resize_keyboard: true
+    };
+  }
+
+  getPriorityBadge(priority) {
+    switch (priority) {
+      case 'urgent': return '🔴 فوری';
+      case 'high': return '🟠 بالا';
+      case 'low': return '⚪ کم';
+      case 'normal':
+      default: return '🟢 عادی';
+    }
+  }
+
+  getStatusBadge(status) {
+    switch (status) {
+      case 'in_progress': return '🟡 در دست اقدام';
+      case 'waiting': return '🟣 منتظر پاسخ';
+      case 'resolved': return '🟢 حل شده';
+      case 'closed': return '⚫ بسته شده';
+      case 'open':
+      default: return '🔵 باز';
+    }
+  }
+
+  getStandardDepartments() {
+    const list = ['فناوری اطلاعات و زیرساخت', 'توسعه نرم‌افزار', 'پشتیبانی مشتریان', 'مارکتینگ و فروش', 'منابع انسانی و اداری', 'مالی و حسابداری', 'عمومی'];
+    const dynamic = Array.from(new Set(db.data.users.map(u => u.department))).filter(Boolean);
+    const combined = Array.from(new Set([...list, ...dynamic]));
+    return combined.slice(0, 8);
+  }
+
+  // --- Start Ticket Creation Wizard ---
+  async startTicketCreationWizard(chatId) {
+    const user = db.findUserByTelegramChatId(chatId);
+    if (!user) {
+      await this.callApi('sendMessage', {
+        chat_id: chatId,
+        text: '⚠️ حساب تلگرام شما هنوز به سامانه متصل نشده است.\nلطفاً ابتدا کد ۶ رقمی موجود در بخش «پروفایل من» در پنل وب را ارسال فرمایید.'
+      });
+      return;
+    }
+
+    // Clear any previous sessions
+    this.draftSessions.delete(chatId);
+    this.ticketCreationSessions.set(chatId, {
+      chatId,
+      user,
+      step: 'AWAITING_TITLE',
+      title: '',
+      department: 'عمومی',
+      priority: 'normal',
+      assigneeId: null,
+      assigneeName: 'عمومی (بدون مسئول اختصاصی)',
+      statusMessageId: null,
+      descriptionLines: [],
+      attachments: [],
+      expiresAt: Date.now() + 60 * 60 * 1000 // 1 hour
+    });
+
+    await this.callApi('sendMessage', {
+      chat_id: chatId,
+      text: `🎫 *ایجاد تیکت جدید (مرحله ۱ از ۴)*\n\n` +
+            `همکار گرامی *${this.escapeMarkdown(user.name)}*، لطفاً **عنوان تیکت** خود را بنویسید و ارسال فرمایید:\n\n` +
+            `_مثال: عدم اتصال به اینترنت یا درخواست دسترسی به مخزن کد_`,
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '❌ انصراف از ایجاد تیکت', callback_data: 'nt_cancel' }]
+        ]
+      }
+    });
+  }
+
+  // --- Step 2: Department Selection ---
+  async sendDepartmentSelection(chatId) {
+    const session = this.ticketCreationSessions.get(chatId);
+    if (!session) return;
+
+    session.step = 'AWAITING_DEPT';
+    const depts = this.getStandardDepartments();
+    const inlineKeyboard = [];
+
+    for (let i = 0; i < depts.length; i += 2) {
+      const row = [{ text: depts[i], callback_data: `nt_dept:${i}` }];
+      if (depts[i + 1]) {
+        row.push({ text: depts[i + 1], callback_data: `nt_dept:${i + 1}` });
+      }
+      inlineKeyboard.push(row);
+    }
+    inlineKeyboard.push([{ text: '❌ انصراف', callback_data: 'nt_cancel' }]);
+
+    await this.callApi('sendMessage', {
+      chat_id: chatId,
+      text: `🏢 *انتخاب واحد سازمانی (مرحله ۲ از ۴)*\n\n` +
+            `📌 *عنوان تیکت:* ${this.escapeMarkdown(session.title)}\n\n` +
+            `لطفاً واحد یا دپارتمان مربوطه را انتخاب کنید:`,
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: inlineKeyboard
+      }
+    });
+  }
+
+  // --- Step 3: Priority Selection ---
+  async sendPrioritySelection(chatId, messageId = null) {
+    const session = this.ticketCreationSessions.get(chatId);
+    if (!session) return;
+
+    session.step = 'AWAITING_PRIORITY';
+    const inlineKeyboard = [
+      [
+        { text: '🔴 فوری (Urgent)', callback_data: 'nt_pri:urgent' },
+        { text: '🟠 بالا (High)', callback_data: 'nt_pri:high' }
+      ],
+      [
+        { text: '🟢 عادی (Normal)', callback_data: 'nt_pri:normal' },
+        { text: '⚪ کم (Low)', callback_data: 'nt_pri:low' }
+      ],
+      [
+        { text: '❌ انصراف', callback_data: 'nt_cancel' }
+      ]
+    ];
+
+    const text = `⚡ *تعیین اولویت تیکت (مرحله ۳ از ۴)*\n\n` +
+                 `📌 *عنوان:* ${this.escapeMarkdown(session.title)}\n` +
+                 `🏢 *واحد:* ${this.escapeMarkdown(session.department)}\n\n` +
+                 `میزان فوریت تیکت را تعیین کنید:`;
+
+    if (messageId) {
+      try {
+        await this.callApi('editMessageText', {
+          chat_id: chatId,
+          message_id: messageId,
+          text,
+          parse_mode: 'Markdown',
+          reply_markup: { inline_keyboard: inlineKeyboard }
+        });
+        return;
+      } catch (e) {}
+    }
+
+    await this.callApi('sendMessage', {
+      chat_id: chatId,
+      text,
+      parse_mode: 'Markdown',
+      reply_markup: { inline_keyboard: inlineKeyboard }
+    });
+  }
+
+  // --- Step 4: Assignee Selection ---
+  async sendAssigneeSelection(chatId, messageId = null) {
+    const session = this.ticketCreationSessions.get(chatId);
+    if (!session) return;
+
+    session.step = 'AWAITING_ASSIGNEE';
+    const activeUsers = db.data.users.filter(u => !u.isRestricted && u.id !== session.user.id);
+
+    activeUsers.sort((a, b) => {
+      const aDept = a.department === session.department ? 1 : 0;
+      const bDept = b.department === session.department ? 1 : 0;
+      return bDept - aDept;
+    });
+
+    const inlineKeyboard = [];
+    const targetUsers = activeUsers.slice(0, 8);
+    for (let i = 0; i < targetUsers.length; i += 2) {
+      const u1 = targetUsers[i];
+      const row = [{ text: `👤 ${u1.name}`, callback_data: `nt_asg:${u1.id}` }];
+      if (targetUsers[i + 1]) {
+        const u2 = targetUsers[i + 1];
+        row.push({ text: `👤 ${u2.name}`, callback_data: `nt_asg:${u2.id}` });
+      }
+      inlineKeyboard.push(row);
+    }
+    inlineKeyboard.push([{ text: '👥 بدون مسئول اختصاصی (ارجاع عمومی)', callback_data: 'nt_asg:none' }]);
+    inlineKeyboard.push([{ text: '❌ انصراف', callback_data: 'nt_cancel' }]);
+
+    const text = `👤 *انتخاب مسئول انجام (مرحله ۴ از ۴)*\n\n` +
+                 `📌 *عنوان:* ${this.escapeMarkdown(session.title)}\n` +
+                 `🏢 *واحد:* ${this.escapeMarkdown(session.department)}\n` +
+                 `⚡ *اولویت:* ${this.getPriorityBadge(session.priority)}\n\n` +
+                 `مسئول پیگیری تیکت را انتخاب فرمایید:`;
+
+    if (messageId) {
+      try {
+        await this.callApi('editMessageText', {
+          chat_id: chatId,
+          message_id: messageId,
+          text,
+          parse_mode: 'Markdown',
+          reply_markup: { inline_keyboard: inlineKeyboard }
+        });
+        return;
+      } catch (e) {}
+    }
+
+    await this.callApi('sendMessage', {
+      chat_id: chatId,
+      text,
+      parse_mode: 'Markdown',
+      reply_markup: { inline_keyboard: inlineKeyboard }
+    });
+  }
+
+  // --- Step 5: Send Interactive Draft Card ---
+  async sendNewTicketDraftCard(chatId, messageId = null) {
+    const session = this.ticketCreationSessions.get(chatId);
+    if (!session) return;
+
+    session.step = 'DRAFT_CONTENT';
+
+    const draftText = `🎫 *پیش‌نویس تیکت جدید*\n\n` +
+                      `📌 *عنوان:* ${this.escapeMarkdown(session.title)}\n` +
+                      `🏢 *واحد:* ${this.escapeMarkdown(session.department)}\n` +
+                      `⚡ *اولویت:* ${this.getPriorityBadge(session.priority)}\n` +
+                      `👤 *مسئول:* ${this.escapeMarkdown(session.assigneeName)}\n\n` +
+                      `📝 *شرح و توضیحات تیکت:*\n` +
+                      `_(هنوز متنی وارد نشده است)_\n\n` +
+                      `📎 *فایل‌های پیوست:* (۰ فایل)\n\n` +
+                      `👇 *راهنما:* اکنون لطفاً متن کامل توضیحات تیکت را بنویسید و ارسال فرمایید. همچنین می‌توانید چندین عکس، فایل، سند یا وویس ارسال کنید تا به این تیکت ضمیمه شوند.\n` +
+                      `پس از تکمیل، دکمه «تایید و ثبت نهایی تیکت» را لمس کنید:`;
+
+    const inlineKeyboard = [
+      [
+        { text: '📤 تایید و ثبت نهایی تیکت', callback_data: 'nt_submit' }
+      ],
+      [
+        { text: '❌ انصراف و لغو', callback_data: 'nt_cancel' }
+      ]
+    ];
+
+    if (messageId) {
+      try {
+        await this.callApi('editMessageText', {
+          chat_id: chatId,
+          message_id: messageId,
+          text: draftText,
+          parse_mode: 'Markdown',
+          reply_markup: { inline_keyboard: inlineKeyboard }
+        });
+        session.statusMessageId = messageId;
+        return;
+      } catch (e) {}
+    }
+
+    const sent = await this.callApi('sendMessage', {
+      chat_id: chatId,
+      text: draftText,
+      parse_mode: 'Markdown',
+      reply_markup: { inline_keyboard: inlineKeyboard }
+    });
+
+    if (sent && sent.message_id) {
+      session.statusMessageId = sent.message_id;
+    }
+  }
+
+  // --- Live Update of New Ticket Draft Card ---
+  async updateNewTicketDraftStatusMessage(chatId) {
+    const session = this.ticketCreationSessions.get(chatId);
+    if (!session || !session.statusMessageId) return;
+
+    const combinedText = session.descriptionLines.join('\n\n');
+    const textPreview = combinedText
+      ? this.escapeMarkdown(combinedText.slice(0, 300) + (combinedText.length > 300 ? '...' : ''))
+      : '_(هنوز متنی وارد نشده)_';
+
+    let filesPreview = '_(۰ فایل)_';
+    if (session.attachments.length > 0) {
+      filesPreview = session.attachments.map((att, idx) => {
+        const sizeKb = Math.round(att.size / 1024);
+        return `   ${idx + 1}. 📎 *${this.escapeMarkdown(att.name)}* (${sizeKb} KB)`;
+      }).join('\n');
+    }
+
+    const draftText = `🎫 *پیش‌نویس تیکت جدید*\n\n` +
+                      `📌 *عنوان:* ${this.escapeMarkdown(session.title)}\n` +
+                      `🏢 *واحد:* ${this.escapeMarkdown(session.department)}\n` +
+                      `⚡ *اولویت:* ${this.getPriorityBadge(session.priority)}\n` +
+                      `👤 *مسئول:* ${this.escapeMarkdown(session.assigneeName)}\n\n` +
+                      `📝 *شرح و توضیحات تیکت:*\n` +
+                      `${textPreview}\n\n` +
+                      `📎 *پیوست‌ها (${session.attachments.length} عدد):*\n` +
+                      `${filesPreview}\n\n` +
+                      `💡 _می‌توانید همچنان توضیحات یا فایل‌های بیشتری بفرستید._\n` +
+                      `برای ثبت تیکت، دکمه زیر را لمس فرمایید:`;
+
+    const inlineKeyboard = [
+      [
+        {
+          text: `📤 تایید و ثبت نهایی تیکت (${session.attachments.length} پیوست)`,
+          callback_data: 'nt_submit'
+        }
+      ],
+      [
+        { text: '❌ انصراف و لغو', callback_data: 'nt_cancel' }
+      ]
+    ];
+
+    try {
+      await this.callApi('editMessageText', {
+        chat_id: chatId,
+        message_id: session.statusMessageId,
+        text: draftText,
+        parse_mode: 'Markdown',
+        reply_markup: { inline_keyboard: inlineKeyboard }
+      });
+    } catch (e) {}
+  }
+
+  // --- Final Submit New Ticket ---
+  async submitNewTicket(chatId, callbackQueryId) {
+    const session = this.ticketCreationSessions.get(chatId);
+    if (!session) {
+      if (callbackQueryId) {
+        await this.callApi('answerCallbackQuery', {
+          callback_query_id: callbackQueryId,
+          text: 'پیش‌نویس تیکت یافت نشد یا منقضی گردیده است.',
+          show_alert: true
+        });
+      }
+      return;
+    }
+
+    const user = session.user;
+    const finalDesc = session.descriptionLines.join('\n\n') || session.title;
+
+    const newTicket = db.createTicket({
+      title: session.title,
+      description: finalDesc,
+      creatorId: user.id,
+      assigneeId: session.assigneeId,
+      taggedUserIds: [],
+      priority: session.priority,
+      status: 'open',
+      department: session.department,
+      deadline: null,
+      attachments: [...session.attachments],
+      channel: 'telegram'
+    });
+
+    const statusMsgId = session.statusMessageId;
+    this.ticketCreationSessions.delete(chatId);
+
+    if (callbackQueryId) {
+      await this.callApi('answerCallbackQuery', {
+        callback_query_id: callbackQueryId,
+        text: `✅ تیکت ${newTicket.id} با موفقیت ثبت شد.`
+      });
+    }
+
+    // 1. Update telegram message
+    try {
+      await this.callApi('editMessageText', {
+        chat_id: chatId,
+        message_id: statusMsgId,
+        text: `✅ *تیکت شما با شناسه \`${newTicket.id}\` با موفقیت در سامانه ثبت گردید.*\n\n` +
+              `📌 *عنوان:* ${this.escapeMarkdown(newTicket.title)}\n` +
+              `🏢 *واحد:* ${this.escapeMarkdown(newTicket.department)}\n` +
+              `⚡ *اولویت:* ${this.getPriorityBadge(newTicket.priority)}\n` +
+              `👤 *مسئول:* ${this.escapeMarkdown(session.assigneeName)}\n` +
+              `📎 *پیوست‌ها:* ${newTicket.attachments.length} فایل\n\n` +
+              `⚡️ این تیکت در لحظه روی سامانه وب تیکتینگ برای همکاران قابل مشاهده شد.`,
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '💬 ارسال پیام تکمیلی / پاسخ', callback_data: `start_reply:${newTicket.id}` }]
+          ]
+        }
+      });
+    } catch (e) {}
+
+    // 2. Real-time broadcast to Web and Mobile Panels (<50ms sync!)
+    this.broadcastWs({
+      type: 'TICKET_CREATED',
+      ticket: newTicket
+    });
+
+    // 3. Dispatch Web-Push & Telegram Notification with Handshake to Assignee
+    if (newTicket.assigneeId && newTicket.assigneeId !== user.id) {
+      try {
+        const pushService = require('./push');
+        pushService.sendToUsers([newTicket.assigneeId], {
+          title: `تیکت جدید: ${newTicket.title}`,
+          body: `توسط ${user.name} (از تلگرام) ارجاع گردید.`,
+          ticketId: newTicket.id,
+          url: `./?ticket=${newTicket.id}`
+        });
+
+        const delivery = db.createDelivery({
+          type: 'ticket',
+          referenceId: newTicket.id,
+          title: `تیکت جدید (${newTicket.id}): ${newTicket.title}`,
+          message: `توسط ${user.name} (از تلگرام) ارجاع گردید.\nتوضیحات: ${(newTicket.description || '').slice(0, 150)}`,
+          targetUserIds: [newTicket.assigneeId],
+          creatorId: user.id
+        });
+
+        await this.sendNotificationWithHandshake({
+          deliveryId: delivery.id,
+          userId: newTicket.assigneeId,
+          title: `تیکت جدید (${newTicket.id}): ${newTicket.title}`,
+          message: `توسط ${user.name} (از تلگرام) ارجاع گردید.\nتوضیحات: ${(newTicket.description || '').slice(0, 150)}`,
+          ticketId: newTicket.id,
+          priority: newTicket.priority
+        });
+      } catch (err) {
+        console.warn('Notification dispatch error for new ticket:', err.message);
+      }
+    }
+  }
+
+  // --- My Tickets Handler ---
+  async handleMyTicketsCommand(chatId) {
+    const user = db.findUserByTelegramChatId(chatId);
+    if (!user) {
+      await this.callApi('sendMessage', {
+        chat_id: chatId,
+        text: '⚠️ ابتدا با ارسال کد ۶ رقمی، حساب خود را متصل نمایید.'
+      });
+      return;
+    }
+
+    const myTickets = db.data.tickets.filter(t => {
+      const isCreator = t.creatorId === user.id;
+      const isAssignee = t.assigneeId === user.id;
+      const isTagged = Array.isArray(t.taggedUserIds) && t.taggedUserIds.includes(user.id);
+      return (isCreator || isAssignee || isTagged) && t.status !== 'closed';
+    }).slice(0, 8);
+
+    if (myTickets.length === 0) {
+      await this.callApi('sendMessage', {
+        chat_id: chatId,
+        text: `همکار گرامی *${this.escapeMarkdown(user.name)}*،\nشما در حال حاضر تیکت باز یا در انتظاری ندارید. 🎉`,
+        parse_mode: 'Markdown',
+        reply_markup: this.getMainMenuKeyboard()
+      });
+      return;
+    }
+
+    let msgText = `📋 *لیست تیکت‌های فعال شما (${myTickets.length} مورد اخیر):*\n\n`;
+    const inlineKeyboard = [];
+
+    myTickets.forEach((t, i) => {
+      msgText += `${i + 1}. \`${t.id}\` — *${this.escapeMarkdown(t.title)}*\n` +
+                 `   ▫️ وضعیت: ${this.getStatusBadge(t.status)} | ${this.getPriorityBadge(t.priority)}\n` +
+                 `   ▫️ واحد: ${this.escapeMarkdown(t.department || 'عمومی')}\n\n`;
+      inlineKeyboard.push([
+        { text: `💬 پاسخ / پیگیری ${t.id}`, callback_data: `start_reply:${t.id}` }
+      ]);
+    });
+
+    await this.callApi('sendMessage', {
+      chat_id: chatId,
+      text: msgText,
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: inlineKeyboard
+      }
+    });
+  }
+
+  // --- Help & Status Handler ---
+  async handleHelpCommand(chatId) {
+    const user = db.findUserByTelegramChatId(chatId);
+    const userInfo = user ? `👤 *حساب متصل:* ${this.escapeMarkdown(user.name)} (${this.escapeMarkdown(user.department)})\n\n` : '';
+
+    const text = `ℹ️ *راهنمای ربات تیکتینگ و اعلانات مانا*\n\n` +
+                 userInfo +
+                 `🔹 *ثبت تیکت جدید:* ارسال دستور \`/newticket\` یا دکمه «🎫 ثبت تیکت جدید»\n` +
+                 `🔹 *مشاهده تیکت‌ها:* ارسال دستور \`/tickets\` یا دکمه «📋 تیکت‌های من»\n` +
+                 `🔹 *پاسخ‌دهی به تیکت:* لمس دکمه «💬 پاسخ به این تیکت» زیر هر پیام اعلان\n` +
+                 `🔹 *تایید دریافت:* لمس دکمه «✅ مشاهده شد» زیر پیام‌ها جهت ثبت حضور\n` +
+                 `🔹 *لغو عملیات جاری:* ارسال \`/cancel\``;
+
+    await this.callApi('sendMessage', {
+      chat_id: chatId,
+      text,
+      parse_mode: 'Markdown',
+      reply_markup: this.getMainMenuKeyboard()
+    });
   }
 
   // --- Initialize Draft Session for Multi-Item Reply ---
@@ -837,12 +1405,21 @@ class TelegramService {
     const username = msg.from?.username || msg.from?.first_name || '';
 
     // Check cancel command
-    if (text === '/cancel') {
+    if (text === '/cancel' || text === '❌ انصراف') {
+      let cancelled = false;
+      if (this.ticketCreationSessions.has(chatId)) {
+        this.ticketCreationSessions.delete(chatId);
+        cancelled = true;
+      }
       if (this.draftSessions.has(chatId)) {
         this.draftSessions.delete(chatId);
+        cancelled = true;
+      }
+      if (cancelled) {
         await this.callApi('sendMessage', {
           chat_id: chatId,
-          text: '❌ پیش‌نویس پاسخ لغو گردید.'
+          text: '❌ عملیات جاری لغو گردید. منوی اصلی در دسترس شماست:',
+          reply_markup: this.getMainMenuKeyboard()
         });
         return;
       }
@@ -862,8 +1439,9 @@ class TelegramService {
             chat_id: chatId,
             text: `🎉 *حساب شما با موفقیت متصل شد!*\n\n` +
                   `همکار گرامی *${matchedUser.name}* (${matchedUser.department})،\n` +
-                  `اکنون تمام تیکت‌ها، پاسخ‌ها و اعلانات سازمانی برای شما ارسال شده و می‌توانید با زدن دکمه «پاسخ به این تیکت»، متن و چندین فایل را ارسال نموده و تایید نهایی کنید.`,
-            parse_mode: 'Markdown'
+                  `اکنون تمام تیکت‌ها، پاسخ‌ها و اعلانات سازمانی برای شما ارسال می‌شود. همچنین می‌توانید مستقیماً از طریق منوی زیر اقدام به ثبت تیکت جدید فرمایید.`,
+            parse_mode: 'Markdown',
+            reply_markup: this.getMainMenuKeyboard()
           });
 
           this.broadcastWs({
@@ -880,8 +1458,11 @@ class TelegramService {
       if (existingUser) {
         await this.callApi('sendMessage', {
           chat_id: chatId,
-          text: `سلام *${existingUser.name}* عزیز 👋\nاکانت تلگرام شما متصل است. برای پاسخ به هر تیکت کافیست دکمه «💬 پاسخ به این تیکت» زیر پیام آن را لمس نمایید.`,
-          parse_mode: 'Markdown'
+          text: `سلام *${existingUser.name}* عزیز 👋\n` +
+                `اکانت تلگرام شما متصل است.\n\n` +
+                `از طریق گزینه‌های زیر می‌توانید تیکت جدید ثبت کرده یا تیکت‌های خود را مشاهده و پیگیری نمایید:`,
+          parse_mode: 'Markdown',
+          reply_markup: this.getMainMenuKeyboard()
         });
         return;
       }
@@ -907,7 +1488,8 @@ class TelegramService {
         await this.callApi('sendMessage', {
           chat_id: chatId,
           text: `🎉 *اتصال حساب برقرار شد!*\n\nهمکار گرامی *${matchedUser.name}*، اکانت تلگرام شما با موفقیت به سامانه متصل گردید.`,
-          parse_mode: 'Markdown'
+          parse_mode: 'Markdown',
+          reply_markup: this.getMainMenuKeyboard()
         });
 
         this.broadcastWs({
@@ -920,8 +1502,107 @@ class TelegramService {
       }
     }
 
+    // Main Menu Commands / Buttons
+    if (text === '🎫 ثبت تیکت جدید' || text === '/newticket' || text === '/new') {
+      await this.startTicketCreationWizard(chatId);
+      return;
+    }
+
+    if (text === '📋 تیکت‌های من' || text === '/tickets' || text === '/mytickets') {
+      await this.handleMyTicketsCommand(chatId);
+      return;
+    }
+
+    if (text === '❓ راهنما و وضعیت' || text === '/help' || text === '/menu') {
+      await this.handleHelpCommand(chatId);
+      return;
+    }
+
     // -----------------------------------------------------------------
-    // ACCUMULATE TEXT & ATTACHMENTS INTO DRAFT SESSION
+    // TICKET CREATION WIZARD MESSAGE HANDLING
+    // -----------------------------------------------------------------
+    const creationSession = this.ticketCreationSessions.get(chatId);
+    if (creationSession) {
+      if (Date.now() > creationSession.expiresAt) {
+        this.ticketCreationSessions.delete(chatId);
+        await this.callApi('sendMessage', {
+          chat_id: chatId,
+          text: '⏱ مهلت ایجاد تیکت به پایان رسید. جهت شروع مجدد، دکمه «🎫 ثبت تیکت جدید» را لمس کنید.',
+          reply_markup: this.getMainMenuKeyboard()
+        });
+        return;
+      }
+
+      // Step 1: Receiving Title
+      if (creationSession.step === 'AWAITING_TITLE') {
+        const titleCandidate = text || caption;
+        if (!titleCandidate || titleCandidate.length < 3) {
+          await this.callApi('sendMessage', {
+            chat_id: chatId,
+            text: '⚠️ عنوان تیکت باید حداقل ۳ کاراکتر باشد. لطفاً عنوان مناسبی وارد کنید:'
+          });
+          return;
+        }
+
+        creationSession.title = titleCandidate.slice(0, 150);
+        await this.sendDepartmentSelection(chatId);
+        return;
+      }
+
+      // Step 5: Draft Content Accumulation (Text, Photo, Document, Voice, Audio)
+      if (creationSession.step === 'DRAFT_CONTENT') {
+        let addedSomething = false;
+
+        const incomingText = text || caption;
+        if (incomingText) {
+          creationSession.descriptionLines.push(incomingText);
+          addedSomething = true;
+        }
+
+        if (msg.photo && Array.isArray(msg.photo) && msg.photo.length > 0) {
+          try {
+            const photo = msg.photo[msg.photo.length - 1];
+            const att = await this.downloadTelegramFile(photo.file_id, 'photo.jpg');
+            creationSession.attachments.push(att);
+            addedSomething = true;
+          } catch (e) {
+            console.error('Ticket draft photo download error:', e);
+          }
+        } else if (msg.document) {
+          try {
+            const att = await this.downloadTelegramFile(msg.document.file_id, msg.document.file_name || 'document');
+            creationSession.attachments.push(att);
+            addedSomething = true;
+          } catch (e) {
+            console.error('Ticket draft document download error:', e);
+          }
+        } else if (msg.voice) {
+          try {
+            const att = await this.downloadTelegramFile(msg.voice.file_id, 'voice_message.ogg');
+            creationSession.attachments.push(att);
+            addedSomething = true;
+          } catch (e) {
+            console.error('Ticket draft voice download error:', e);
+          }
+        } else if (msg.audio) {
+          try {
+            const att = await this.downloadTelegramFile(msg.audio.file_id, msg.audio.file_name || 'audio.mp3');
+            creationSession.attachments.push(att);
+            addedSomething = true;
+          } catch (e) {
+            console.error('Ticket draft audio download error:', e);
+          }
+        }
+
+        if (addedSomething) {
+          await this.updateNewTicketDraftStatusMessage(chatId);
+          return;
+        }
+      }
+    }
+
+    // -----------------------------------------------------------------
+    // ACCUMULATE TEXT & ATTACHMENTS INTO REPLY DRAFT SESSION
     // -----------------------------------------------------------------
     let session = this.draftSessions.get(chatId);
 
@@ -946,7 +1627,8 @@ class TelegramService {
         this.draftSessions.delete(chatId);
         await this.callApi('sendMessage', {
           chat_id: chatId,
-          text: '⏱ زمان پیش‌نویس منقضی شد. لطفاً مجدداً دکمه «پاسخ به تیکت» را لمس فرمایید.'
+          text: '⏱ زمان پیش‌نویس منقضی شد. لطفاً مجدداً دکمه «پاسخ به تیکت» را لمس فرمایید.',
+          reply_markup: this.getMainMenuKeyboard()
         });
         return;
       }
@@ -1010,7 +1692,8 @@ class TelegramService {
     // Default Fallback
     await this.callApi('sendMessage', {
       chat_id: chatId,
-      text: `پیام دریافت شد. جهت پاسخ به یک تیکت، دکمه «💬 پاسخ به این تیکت» را لمس کنید.`
+      text: `سلام همکار گرامی،\nبرای ایجاد تیکت از دکمه «🎫 ثبت تیکت جدید» و برای پاسخ به یک پیام از دکمه «💬 پاسخ به این تیکت» استفاده فرمایید.`,
+      reply_markup: this.getMainMenuKeyboard()
     });
   }
 

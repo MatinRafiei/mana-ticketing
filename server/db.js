@@ -335,6 +335,55 @@ class Database {
     return this.data.push_subscriptions.filter(s => userIds.includes(s.userId));
   }
 
+  // --- Tickets Management ---
+  getNextTicketId() {
+    let maxNum = 100;
+    if (Array.isArray(this.data.tickets)) {
+      this.data.tickets.forEach(t => {
+        const match = t.id && t.id.match(/^TCK-(\d+)$/);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (num > maxNum) maxNum = num;
+        }
+      });
+    }
+    return `TCK-${maxNum + 1}`;
+  }
+
+  createTicket({ title, description, creatorId, assigneeId, taggedUserIds, priority, status, department, deadline, attachments, channel = 'web' }) {
+    const newTicket = {
+      id: this.getNextTicketId(),
+      title: (title || '').trim(),
+      description: (description || '').trim(),
+      creatorId: creatorId || 'system',
+      assigneeId: assigneeId || null,
+      taggedUserIds: Array.isArray(taggedUserIds) ? taggedUserIds : [],
+      priority: priority || 'normal',
+      status: status || 'open',
+      department: department || 'عمومی',
+      deadline: deadline || null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      attachments: Array.isArray(attachments) ? attachments : [],
+      replies: [],
+      history: [
+        {
+          action: 'CREATED',
+          actorId: creatorId || 'system',
+          timestamp: new Date().toISOString(),
+          channel: channel || 'web'
+        }
+      ]
+    };
+
+    if (!Array.isArray(this.data.tickets)) {
+      this.data.tickets = [];
+    }
+    this.data.tickets.unshift(newTicket);
+    this.save();
+    return newTicket;
+  }
+
   // --- Deliveries & Interaction Tracking ---
   createDelivery({ type, referenceId, title, message, targetUserIds, creatorId }) {
     const deliveryGroup = {

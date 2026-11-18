@@ -238,33 +238,19 @@ router.post('/tickets', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'عنوان تیکت و مسئول انجام الزامی است.' });
     }
 
-    const nextNum = db.data.tickets.length + 101;
-    const newTicket = {
-      id: `TCK-${nextNum}`,
-      title: title.trim(),
-      description: (description || '').trim(),
+    const newTicket = db.createTicket({
+      title,
+      description,
       creatorId: req.user.id,
-      assigneeId: assigneeId,
-      taggedUserIds: taggedUserIds || [],
-      priority: priority || 'normal',
+      assigneeId,
+      taggedUserIds,
+      priority,
       status: 'open',
-      department: department || 'عمومی',
-      deadline: deadline || null,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      attachments: attachments || [],
-      replies: [],
-      history: [
-        {
-          action: 'CREATED',
-          actorId: req.user.id,
-          timestamp: new Date().toISOString()
-        }
-      ]
-    };
-
-    db.data.tickets.unshift(newTicket);
-    db.save();
+      department,
+      deadline,
+      attachments,
+      channel: 'web'
+    });
 
     // Broadcast live to all connected WebSocket clients
     broadcastWs({ type: 'TICKET_CREATED', ticket: newTicket });
