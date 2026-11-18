@@ -220,7 +220,7 @@ class TelegramService {
   }
 
   // --- Dispatch Notification with Handshake & Reply Inline Buttons ---
-  async sendNotificationWithHandshake({ deliveryId, userId, title, message, ticketId, detailsUrl, priority }) {
+  async sendNotificationWithHandshake({ deliveryId, userId, title, message, ticketId, detailsUrl, priority, creatorName, creatorDept, senderName }) {
     const user = db.findUserById(userId);
     if (!user || !user.telegramChatId) {
       return { success: false, reason: 'کاربر به ربات تلگرام متصل نیست' };
@@ -228,11 +228,51 @@ class TelegramService {
 
     const priorityBadge = priority === 'urgent' ? '🔴 فوری' : (priority === 'high' ? '🟠 بالا' : '🔵 عادی');
 
-    const text = `🔔 *سامانه تیکتینگ و اعلانات مانا*\n\n` +
-                 `📌 *${this.escapeMarkdown(title)}*\n` +
-                 `🔖 اولویت: ${priorityBadge}\n\n` +
-                 `${this.escapeMarkdown(message)}\n\n` +
-                 `⚠️ _جهت تایید دریافت، دکمه اول و جهت ارسال پاسخ، دکمه دوم را لمس فرمایید._`;
+    const group = deliveryId ? db.data.deliveries?.find(d => d.id === deliveryId) : null;
+    const isAnnouncement = Boolean(
+      (group && group.type === 'announcement') ||
+      title.includes('بخشنامه') ||
+      title.includes('اعلان') ||
+      title.startsWith('📢')
+    );
+
+    let effectiveCreatorName = senderName || creatorName || group?.creatorName;
+    let effectiveCreatorDept = creatorDept || group?.creatorDepartment;
+
+    if (!effectiveCreatorName && group?.creatorId) {
+      if (group.creatorId === 'superadmin') {
+        effectiveCreatorName = 'مدیر ارشد سیستم (Superadmin)';
+        effectiveCreatorDept = 'مدیریت';
+      } else {
+        const creatorUser = db.findUserById(group.creatorId);
+        if (creatorUser) {
+          effectiveCreatorName = creatorUser.name;
+          effectiveCreatorDept = creatorUser.department;
+        }
+      }
+    }
+
+    let text;
+    if (isAnnouncement) {
+      const creatorDisplay = effectiveCreatorName || 'مدیریت سامانه';
+      const deptPart = effectiveCreatorDept ? ` (${effectiveCreatorDept})` : '';
+
+      text = `📢 *بخشنامه و اعلان رسمی درون‌سازمانی*\n\n` +
+             `📌 *${this.escapeMarkdown(title)}*\n` +
+             `🔖 *اولویت:* ${priorityBadge}\n` +
+             `👤 *ثبت‌کننده اعلان:* ${this.escapeMarkdown(creatorDisplay)}${this.escapeMarkdown(deptPart)}\n\n` +
+             `📄 *متن پیام:*\n${this.escapeMarkdown(message)}\n\n` +
+             `ℹ️ _این اعلان توسط «${this.escapeMarkdown(creatorDisplay)}» در سامانه ثبت شده است._\n\n` +
+             `⚠️ _لطفاً جهت تایید دریافت، دکمه «✅ مشاهده شد / تایید دریافت» را لمس فرمایید._`;
+    } else {
+      const creatorLine = effectiveCreatorName ? `👤 *ارجاع‌دهنده:* ${this.escapeMarkdown(effectiveCreatorName)}\n` : '';
+      text = `🔔 *سامانه تیکتینگ و اعلانات مانا*\n\n` +
+             `📌 *${this.escapeMarkdown(title)}*\n` +
+             `🔖 *اولویت:* ${priorityBadge}\n` +
+             (creatorLine ? `${creatorLine}\n` : '\n') +
+             `${this.escapeMarkdown(message)}\n\n` +
+             `⚠️ _جهت تایید دریافت، دکمه اول و جهت ارسال پاسخ، دکمه دوم را لمس فرمایید._`;
+    }
 
     const inlineKeyboard = [
       [
@@ -294,12 +334,27 @@ class TelegramService {
     if (!recipient || recipient.status === 'acknowledged') return false;
 
     const resendNum = (recipient.resendCount || 0) + 1;
+    const isAnnouncement = group?.type === 'announcement' || title.includes('بخشنامه') || title.includes('اعلان');
 
-    const text = `⚠️ *یادآوری (${resendNum}): اعلان بدون تایید*\n\n` +
+    let creatorName = group?.creatorName;
+    if (!creatorName && group?.creatorId) {
+      if (group.creatorId === 'superadmin') {
+        creatorName = 'مدیر ارشد سیستم (Superadmin)';
+      } else {
+        const cu = db.findUserById(group.creatorId);
+        if (cu) creatorName = cu.name;
+      }
+    }
+
+    const creatorLine = creatorName ? `👤 *ثبت‌کننده اعلان:* ${this.escapeMarkdown(creatorName)}\n` : '';
+
+    const text = `⚠️ *یادآوری (${resendNum}): ${isAnnouncement ? 'بخشنامه' : 'پیام'} بدون تایید*\n\n` +
                  `همکار گرامی *${this.escapeMarkdown(user.name)}*،\n` +
                  `شما هنوز مشاهده پیام زیر را تایید نکرده‌اید:\n\n` +
                  `📌 *${this.escapeMarkdown(title)}*\n` +
+                 (creatorLine ? `${creatorLine}\n` : '') +
                  `${this.escapeMarkdown(message.slice(0, 150))}...\n\n` +
+                 (creatorName && isAnnouncement ? `ℹ️ _این بخشنامه توسط «${this.escapeMarkdown(creatorName)}» در سامانه ثبت شده است._\n\n` : '') +
                  `👇 _جهت ثبت حضور و دریافت، لطفاً دکمه زیر را بزنید:_`;
 
     const inlineKeyboard = [
@@ -1536,12 +1591,14 @@ class TelegramService {
     const recipientCount = targetUsers.length;
     const tgCount = targetUsers.filter(u => u.telegramChatId).length;
 
+    const creatorDept = session.user?.department ? ` (واحد ${session.user.department})` : '';
     const draftText = `📋 *پیش‌نویس نهایی بخشنامه و اعلان عمومی*\n\n` +
                       `📌 *عنوان:* ${this.escapeMarkdown(session.title)}\n` +
+                      `✍️ *ثبت‌کننده:* ${this.escapeMarkdown(session.user?.name || 'مدیریت')}${this.escapeMarkdown(creatorDept)}\n` +
                       `👥 *جامعه هدف:* ${this.escapeMarkdown(session.targetDepartmentName)} (${recipientCount} نفر، ${tgCount} تلگرام فعال)\n` +
                       `⚡ *اولویت:* ${priBadge}\n\n` +
                       `📄 *متن کامل اعلان:*\n${this.escapeMarkdown(session.content)}\n\n` +
-                      `⚠️ *توجه:* پس از تایید، این اعلان برای تمام افراد فوق ارسال شده و دکمه «تایید دریافت و مشاهده» در تلگرام آن‌ها قرار خواهد گرفت.\n\n` +
+                      `⚠️ *توجه:* پس از تایید، این اعلان برای تمام افراد فوق ارسال شده و نام شما به عنوان ثبت‌کننده در پیام تلگرام همکاران درج خواهد شد.\n\n` +
                       `جهت ارسال نهایی، دکمه زیر را لمس فرمایید:`;
 
     const inlineKeyboard = [
@@ -1607,7 +1664,9 @@ class TelegramService {
       content: session.content,
       targetDepartment: session.targetDepartment || 'all',
       priority: session.priority || 'normal',
-      creatorId: user.id
+      creatorId: user.id,
+      creatorName: user.name,
+      creatorDepartment: user.department
     });
 
     // Determine target users
@@ -1624,7 +1683,9 @@ class TelegramService {
       title: `بخشنامه سازمانی: ${session.title}`,
       message: session.content,
       targetUserIds,
-      creatorId: user.id
+      creatorId: user.id,
+      creatorName: user.name,
+      creatorDepartment: user.department
     });
 
     const statusMsgId = session.statusMessageId;
@@ -1644,6 +1705,7 @@ class TelegramService {
         message_id: statusMsgId,
         text: `✅ *بخشنامه سازمانی با موفقیت منتشر شد!*\n\n` +
               `📌 *عنوان:* ${this.escapeMarkdown(ann.title)}\n` +
+              `✍️ *ثبت‌کننده:* ${this.escapeMarkdown(user.name)}\n` +
               `👥 *جامعه هدف:* ${this.escapeMarkdown(session.targetDepartmentName)}\n` +
               `⚡ *اولویت:* ${this.getPriorityBadge(session.priority)}\n` +
               `📊 *تعداد مخاطبین:* ${targetUserIds.length} نفر\n\n` +
@@ -1657,7 +1719,7 @@ class TelegramService {
       const pushService = require('./push');
       pushService.sendToUsers(targetUserIds, {
         title: `بخشنامه سازمانی: ${session.title}`,
-        body: session.content.slice(0, 90),
+        body: `ثبت‌شده توسط ${user.name}: ${session.content.slice(0, 80)}`,
         url: './'
       });
     } catch (e) {}
@@ -1678,7 +1740,9 @@ class TelegramService {
             userId: u.id,
             title: `📢 بخشنامه سازمانی: ${session.title}`,
             message: session.content,
-            priority: session.priority || 'normal'
+            priority: session.priority || 'normal',
+            creatorName: user.name,
+            creatorDept: user.department
           });
         } catch (err) {
           console.warn(`Error dispatching announcement to user ${u.id}:`, err.message);

@@ -234,7 +234,28 @@ router.post('/telegram/test', requireSuperadmin, async (req, res) => {
 
 // Deliveries Tracking (Superadmin)
 router.get('/deliveries', requireSuperadmin, (req, res) => {
-  res.json(db.data.deliveries);
+  const enrichedDeliveries = (db.data.deliveries || []).map(d => {
+    let creatorName = d.creatorName;
+    let creatorDepartment = d.creatorDepartment;
+    if (!creatorName && d.creatorId) {
+      if (d.creatorId === 'superadmin') {
+        creatorName = 'مدیر ارشد سیستم (Superadmin)';
+        creatorDepartment = 'مدیریت';
+      } else {
+        const u = db.findUserById(d.creatorId);
+        if (u) {
+          creatorName = u.name;
+          creatorDepartment = u.department;
+        }
+      }
+    }
+    return {
+      ...d,
+      creatorName: creatorName || 'مدیریت سامانه',
+      creatorDepartment: creatorDepartment || ''
+    };
+  });
+  res.json(enrichedDeliveries);
 });
 
 // Send Manual Resend
@@ -270,7 +291,9 @@ router.post('/announcements', requireSuperadmin, async (req, res) => {
       content,
       targetDepartment: targetDepartment || 'all',
       priority: priority || 'normal',
-      creatorId: 'superadmin'
+      creatorId: 'superadmin',
+      creatorName: 'مدیر ارشد سیستم (Superadmin)',
+      creatorDepartment: 'مدیریت'
     });
 
     // Determine target users
@@ -287,7 +310,9 @@ router.post('/announcements', requireSuperadmin, async (req, res) => {
       title: `بخشنامه سازمانی: ${title}`,
       message: content,
       targetUserIds,
-      creatorId: 'superadmin'
+      creatorId: 'superadmin',
+      creatorName: 'مدیر ارشد سیستم (Superadmin)',
+      creatorDepartment: 'مدیریت'
     });
 
     // Send via Telegram with Handshake Button
@@ -298,7 +323,9 @@ router.post('/announcements', requireSuperadmin, async (req, res) => {
           userId: u.id,
           title: `📢 بخشنامه سازمانی: ${title}`,
           message: content,
-          priority: priority || 'normal'
+          priority: priority || 'normal',
+          creatorName: 'مدیر ارشد سیستم (Superadmin)',
+          creatorDept: 'مدیریت'
         });
       }
     }

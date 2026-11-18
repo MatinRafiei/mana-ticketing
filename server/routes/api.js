@@ -443,7 +443,29 @@ router.get('/deliveries', requireAuth, (req, res) => {
     return res.status(403).json({ error: 'دسترسی مشاهده گزارش تحویل اعلانات برای نقش شما مجاز نیست.' });
   }
 
-  res.json(db.data.deliveries);
+  const enrichedDeliveries = (db.data.deliveries || []).map(d => {
+    let creatorName = d.creatorName;
+    let creatorDepartment = d.creatorDepartment;
+    if (!creatorName && d.creatorId) {
+      if (d.creatorId === 'superadmin') {
+        creatorName = 'مدیر ارشد سیستم (Superadmin)';
+        creatorDepartment = 'مدیریت';
+      } else {
+        const u = db.findUserById(d.creatorId);
+        if (u) {
+          creatorName = u.name;
+          creatorDepartment = u.department;
+        }
+      }
+    }
+    return {
+      ...d,
+      creatorName: creatorName || 'مدیریت سامانه',
+      creatorDepartment: creatorDepartment || ''
+    };
+  });
+
+  res.json(enrichedDeliveries);
 });
 
 // Create & Dispatch Organization Announcement (Managers & Admins)
@@ -465,7 +487,9 @@ router.post('/announcements', requireAuth, async (req, res) => {
     content,
     targetDepartment: targetDepartment || 'all',
     priority: priority || 'normal',
-    creatorId: req.user.id
+    creatorId: req.user.id,
+    creatorName: req.user.name,
+    creatorDepartment: req.user.department
   });
 
   // Determine target users
@@ -482,13 +506,15 @@ router.post('/announcements', requireAuth, async (req, res) => {
     title: `بخشنامه سازمانی: ${title}`,
     message: content,
     targetUserIds,
-    creatorId: req.user.id
+    creatorId: req.user.id,
+    creatorName: req.user.name,
+    creatorDepartment: req.user.department
   });
 
   // 1. Web-Push
   pushService.sendToUsers(targetUserIds, {
     title: `بخشنامه سازمانی: ${title}`,
-    body: content.slice(0, 90),
+    body: `ثبت‌شده توسط ${req.user.name}: ${content.slice(0, 80)}`,
     url: './'
   });
 
@@ -500,7 +526,9 @@ router.post('/announcements', requireAuth, async (req, res) => {
         userId: u.id,
         title: `📢 بخشنامه سازمانی: ${title}`,
         message: content,
-        priority: priority || 'normal'
+        priority: priority || 'normal',
+        creatorName: req.user.name,
+        creatorDept: req.user.department
       });
     }
   }

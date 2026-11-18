@@ -206,6 +206,9 @@ export class AdminTabComponent {
                             </span>
                             <h4 class="font-bold text-xs sm:text-sm text-slate-900 dark:text-white">${group.title}</h4>
                           </div>
+                          <div class="flex items-center gap-2 mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                            <span>✍️ ثبت‌کننده: <strong class="text-slate-700 dark:text-slate-200">${group.creatorName || (state.getUser(group.creatorId)?.name) || 'مدیریت سامانه'}</strong></span>
+                          </div>
                           <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">${group.message}</p>
                         </div>
                         <span class="text-[10px] text-slate-400 font-mono">${formatJalali(group.createdAt)}</span>

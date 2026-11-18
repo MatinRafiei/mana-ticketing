@@ -413,7 +413,22 @@ const STANDARD_DEPARTMENTS = [
   }
 
   // --- Deliveries & Interaction Tracking ---
-  createDelivery({ type, referenceId, title, message, targetUserIds, creatorId }) {
+  createDelivery({ type, referenceId, title, message, targetUserIds, creatorId, creatorName, creatorDepartment }) {
+    let resolvedCreatorName = creatorName;
+    let resolvedCreatorDept = creatorDepartment;
+    if (!resolvedCreatorName && creatorId) {
+      if (creatorId === 'superadmin') {
+        resolvedCreatorName = 'مدیر ارشد سیستم (Superadmin)';
+        resolvedCreatorDept = 'مدیریت';
+      } else {
+        const u = this.findUserById(creatorId);
+        if (u) {
+          resolvedCreatorName = u.name;
+          resolvedCreatorDept = u.department;
+        }
+      }
+    }
+
     const deliveryGroup = {
       id: 'del_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
       type: type || 'ticket', // 'ticket' | 'announcement'
@@ -421,6 +436,8 @@ const STANDARD_DEPARTMENTS = [
       title: title || '',
       message: message || '',
       creatorId: creatorId || 'system',
+      creatorName: resolvedCreatorName || 'مدیریت سامانه',
+      creatorDepartment: resolvedCreatorDept || '',
       createdAt: new Date().toISOString(),
       recipients: []
     };
@@ -495,7 +512,22 @@ const STANDARD_DEPARTMENTS = [
   }
 
   // --- Announcements CRUD ---
-  createAnnouncement({ title, content, targetDepartment, priority, creatorId }) {
+  createAnnouncement({ title, content, targetDepartment, priority, creatorId, creatorName, creatorDepartment }) {
+    let resolvedCreatorName = creatorName;
+    let resolvedCreatorDept = creatorDepartment;
+    if (!resolvedCreatorName && creatorId) {
+      if (creatorId === 'superadmin') {
+        resolvedCreatorName = 'مدیر ارشد سیستم (Superadmin)';
+        resolvedCreatorDept = 'مدیریت';
+      } else {
+        const u = this.findUserById(creatorId);
+        if (u) {
+          resolvedCreatorName = u.name;
+          resolvedCreatorDept = u.department;
+        }
+      }
+    }
+
     const announcement = {
       id: 'ann_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
       title: title.trim(),
@@ -503,6 +535,8 @@ const STANDARD_DEPARTMENTS = [
       targetDepartment: targetDepartment || 'all',
       priority: priority || 'normal', // 'urgent', 'high', 'normal'
       creatorId: creatorId || 'system',
+      creatorName: resolvedCreatorName || 'مدیریت سامانه',
+      creatorDepartment: resolvedCreatorDept || '',
       createdAt: new Date().toISOString()
     };
     this.data.announcements.unshift(announcement);
